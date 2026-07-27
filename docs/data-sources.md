@@ -33,15 +33,15 @@ The bundled USD table is derived from the community-maintained
 `sahilgupta/sbi-fx-ratekeeper` repository:
 
 - Repository: <https://github.com/sahilgupta/sbi-fx-ratekeeper>
-- Pinned source commit:
-  `4cea84491ec53b80a5171463e51e04f667bcb6e5`
 - Source file:
   `csv_files/SBI_REFERENCE_RATES_USD.csv`
 - Repository license: MIT
-- Pinned upstream CSV SHA-256:
-  `5e4633125e0cc91d05cac3823e7435081badd0cf36ec81d16e634e2fe9907049`
-- Normalized bundled CSV SHA-256:
-  `5a6e604c4f4366479515ea53fc18c47f29b970f6a94fbd9c38972fa58da12db2`
+
+The current full source commit, upstream SHA-256, normalized SHA-256, record
+count, and coverage dates are recorded in
+[`reference-data/manifest.json`](../reference-data/manifest.json). Row-level
+evidence links are rewritten to that immutable source commit during each
+refresh.
 
 Use this table as a convenience reference only. It is community-derived from
 saved SBI rate evidence, so reviewers should verify material dates against the
@@ -71,9 +71,12 @@ file:
   <https://www.sec.gov/about/webmaster-frequently-asked-questions>
 - Source file:
   <https://www.sec.gov/files/company_tickers_exchange.json>
-- Snapshot last modified: 2026-07-24
-- Bundled snapshot SHA-256:
-  `e6fbad74d63540e73239f257809cf217b9d6b4fed2410691f0c8c576c9a6cf3c`
+
+The current Last-Modified value, bundled snapshot SHA-256, record count, and
+field list are recorded in
+[`reference-data/manifest.json`](../reference-data/manifest.json). Each
+automated refresh also records the exact upstream response SHA-256 separately
+from the normalized bundled snapshot hash.
 
 Bundled fields:
 
@@ -93,6 +96,25 @@ tax residence, instrument type, or treaty eligibility from a ticker match alone.
 When the company metadata does not match the IBKR statement context, use the
 broker statement and reviewer evidence as the controlling source.
 
+## Automated Refresh
+
+The checked-in workflow
+[`refresh-reference-data.yml`](../.github/workflows/refresh-reference-data.yml)
+runs daily at 03:37 UTC (09:07 Asia/Kolkata) and can also be started manually.
+It:
+
+1. fetches the latest community SBI CSV and resolves its full source commit;
+2. fetches the official SEC ticker and exchange association snapshot with an
+   identified User-Agent;
+3. applies size, schema, coverage, and row-count safety checks;
+4. regenerates local snapshots and browser assets;
+5. runs the complete validation suite; and
+6. opens or updates a review pull request when tracked data changed.
+
+The automation never merges its own pull request. A reviewer remains
+responsible for checking provenance and unexpected data changes before they
+reach the published app.
+
 ## Runtime Privacy
 
 Reference data is prebundled so the core workflow remains local:
@@ -101,5 +123,5 @@ Reference data is prebundled so the core workflow remains local:
 - No runtime provider calls are made for TTBR or company metadata.
 - No taxpayer rows are sent to SBI, SEC, GitHub, market-data providers, or the
   project maintainers.
-- Updates to reference data require a source refresh, hash verification, and a
-  documentation update to this file.
+- Updates to reference data require a source refresh, hash verification, and
+  pull-request review.

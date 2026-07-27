@@ -125,6 +125,20 @@ source snapshots:
 npm run data:build
 ```
 
+Refresh both SBI and SEC snapshots from their source endpoints:
+
+```bash
+npm run data:refresh
+```
+
+A scheduled workflow at
+[`.github/workflows/refresh-reference-data.yml`](.github/workflows/refresh-reference-data.yml)
+runs daily at 03:37 UTC (09:07 Asia/Kolkata), validates the complete app, and
+opens or updates a review pull request when checked-in snapshots change. It
+never merges the pull request automatically. GitHub may disable scheduled
+workflows after 60 days without repository activity; the same workflow remains
+available through manual dispatch.
+
 The command names are defined in [package.json](package.json).
 
 ## 🏦 Reference Data
@@ -137,8 +151,8 @@ processing taxpayer statements.
 
 The bundled USD table is derived from the community-maintained
 [`sahilgupta/sbi-fx-ratekeeper`](https://github.com/sahilgupta/sbi-fx-ratekeeper)
-repository and pinned to commit
-`4cea84491ec53b80a5171463e51e04f667bcb6e5`.
+repository. Every refresh pins evidence links to the full source commit recorded
+in [`reference-data/manifest.json`](reference-data/manifest.json).
 
 Official context:
 

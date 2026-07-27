@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -178,14 +179,18 @@ test("enrichReviewWithReferenceData adds metadata without mutating the review mo
   assert.equal(enriched.referenceData.companyLookup.records, 2);
 });
 
-test("checked-in reference snapshots parse to the manifest-backed coverage", () => {
+test("checked-in reference snapshots parse to the manifest-backed coverage", async () => {
   const rates = parseSbiReferenceRatesCsv(BUNDLED_SBI_USD_CSV);
   const companies = parseSecCompanyTickersExchange(BUNDLED_SEC_COMPANY_JSON);
+  const manifest = JSON.parse(await readFile(new URL("../reference-data/manifest.json", import.meta.url), "utf8"));
+  const expectedSbi = manifest.datasets.sbiUsdTtBuyCommunity;
+  const expectedSec = manifest.datasets.secCompanyTickersExchange;
 
-  assert.equal(rates.count, 1_551);
+  assert.equal(rates.count, expectedSbi.records);
   assert.equal(rates.records[0].date, "2020-01-06");
-  assert.equal(rates.records.at(-1).date, "2026-07-27");
+  assert.equal(rates.records[0].date, expectedSbi.coverage.first);
+  assert.equal(rates.records.at(-1).date, expectedSbi.coverage.last);
   assert.equal(lookupUsdTtBuyRate(rates, "2024-06-04").status, "ambiguous");
-  assert.equal(companies.count, 10_432);
+  assert.equal(companies.count, expectedSec.records);
   assert.equal(companies.entries.AAPL.name, "Apple Inc.");
 });
