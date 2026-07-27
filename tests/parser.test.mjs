@@ -8,6 +8,7 @@ import {
   parseCsv,
   parseIbkrStatements,
 } from "../lib/ibkr.js";
+import { csvCell } from "../lib/export.js";
 
 const fixtureUrl = new URL("../fixtures/demo-activity.csv", import.meta.url);
 
@@ -18,6 +19,13 @@ test("parseCsv handles quoted commas, quotes, CRLF, and blank lines", () => {
     ["A", "B", "C"],
     ["1", "two, too", 'said "hi"'],
   ]);
+});
+
+test("csvCell neutralizes spreadsheet formulas after whitespace or control characters", () => {
+  assert.equal(csvCell("=1+1"), "'=1+1");
+  assert.equal(csvCell(" \t+1+1"), "' \t+1+1");
+  assert.equal(csvCell("\u0000@SUM(A1:A2)"), "'\u0000@SUM(A1:A2)");
+  assert.equal(csvCell("ordinary value"), "ordinary value");
 });
 
 test("parseIbkrStatements maps IBKR sections and suppresses duplicate data rows", async () => {
@@ -62,6 +70,8 @@ test("buildReviewModel returns the browser-friendly review contract", async () =
   assert.deepEqual(review.source.fileNames, ["demo-activity.csv"]);
   assert.equal(review.assumptions.status, "missing");
   assert.equal(review.assumptions.fxRates.length, 0);
+  assert.equal("legacySchedules" in review, false);
+  assert.equal("findings" in review, false);
 });
 
 test("review validations conservatively flag missing FX and manual-review events", async () => {

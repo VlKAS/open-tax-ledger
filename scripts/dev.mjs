@@ -59,7 +59,10 @@ const server = createServer((request, response) => {
 
   response.writeHead(200, {
     "Cache-Control": "no-store",
+    "Content-Security-Policy":
+      "default-src 'self'; base-uri 'self'; connect-src 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self'",
     "Content-Type": contentTypes[extname(asset).toLowerCase()] ?? "application/octet-stream",
+    "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
   });
   if (request.method === "HEAD") {

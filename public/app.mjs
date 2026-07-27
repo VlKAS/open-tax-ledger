@@ -3,6 +3,7 @@ import {
   makeDemoReview,
   parseIbkrStatements,
 } from "/lib/ibkr.js";
+import { csvCell } from "/lib/export.js";
 
 const state = {
   currentStep: "import",
@@ -12,6 +13,9 @@ const state = {
   sourceKind: null,
 };
 
+const MAX_FILE_COUNT = 5;
+const MAX_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 const stepOrder = ["import", "configure", "review", "export"];
 const elements = {
   auditFiles: document.querySelector('[data-audit="files"]'),
@@ -74,13 +78,6 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function csvCell(value) {
-  const raw = String(value ?? "");
-  const string =
-    typeof value === "string" && /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
-  return /[",\r\n]/.test(string) ? `"${string.replaceAll('"', '""')}"` : string;
-}
-
 function setImportStatus(message, kind = "") {
   elements.importStatus.textContent = message;
   elements.importStatus.className = `inline-status${kind ? ` is-${kind}` : ""}`;
@@ -135,27 +132,54 @@ function updateFileList() {
 }
 
 function addFiles(files) {
-  const validType = [...files].filter((file) => {
-    const lowerName = file.name.toLowerCase();
-    return lowerName.endsWith(".csv") || file.type === "text/csv";
-  });
-  const incoming = validType.filter((file) => file.size <= 25 * 1024 * 1024);
-
   const known = new Set(state.files.map((file) => `${file.name}:${file.size}:${file.lastModified}`));
-  for (const file of incoming) {
-    const key = `${file.name}:${file.size}:${file.lastModified}`;
-    if (!known.has(key)) {
-      state.files.push(file);
-      known.add(key);
+  let totalBytes = state.files.reduce((sum, file) => sum + file.size, 0);
+  let invalidType = 0;
+  let oversized = 0;
+  let overTotal = 0;
+  let overCount = 0;
+  let duplicates = 0;
+
+  for (const file of [...files]) {
+    const lowerName = file.name.toLowerCase();
+    if (!(lowerName.endsWith(".csv") || file.type === "text/csv")) {
+      invalidType += 1;
+      continue;
     }
+    if (file.size > MAX_FILE_BYTES) {
+      oversized += 1;
+      continue;
+    }
+    const key = `${file.name}:${file.size}:${file.lastModified}`;
+    if (known.has(key)) {
+      duplicates += 1;
+      continue;
+    }
+    if (state.files.length >= MAX_FILE_COUNT) {
+      overCount += 1;
+      continue;
+    }
+    if (totalBytes + file.size > MAX_TOTAL_BYTES) {
+      overTotal += 1;
+      continue;
+    }
+    state.files.push(file);
+    known.add(key);
+    totalBytes += file.size;
   }
 
-  if (validType.length < files.length) {
-    setImportStatus("Only CSV files were added; other formats were ignored.", "error");
-  } else if (incoming.length < validType.length) {
-    setImportStatus("Files larger than 25 MB were ignored to protect this browser tab.", "error");
-  }
   updateFileList();
+  if (invalidType > 0) {
+    setImportStatus("Only CSV files were added; other formats were ignored.", "error");
+  } else if (oversized > 0) {
+    setImportStatus("Files larger than 25 MB were ignored to protect this browser tab.", "error");
+  } else if (overTotal > 0) {
+    setImportStatus("The 50 MB total import limit was reached; remaining files were ignored.", "error");
+  } else if (overCount > 0) {
+    setImportStatus("Up to 5 statement files can be parsed in one local session.", "error");
+  } else if (duplicates > 0) {
+    setImportStatus("Duplicate statement files were ignored.", "error");
+  }
 }
 
 async function processFiles() {
@@ -473,6 +497,19 @@ function exportJson() {
     showToast("Load statements or the synthetic demo before exporting.");
     return;
   }
+  const {
+    generatedAt,
+    source,
+    summary,
+    schedules,
+    validations,
+    assumptions,
+    privacy,
+    totals,
+    currencies,
+    stats,
+    checklist,
+  } = state.review;
   downloadBlob(
     "opentax-ledger-audit.json",
     "application/json;charset=utf-8",
@@ -482,7 +519,19 @@ function exportJson() {
         version: "0.1.0",
         exportedAt: new Date().toISOString(),
         config: getConfig(),
-        review: state.review,
+        review: {
+          generatedAt,
+          source,
+          summary,
+          schedules,
+          validations,
+          assumptions,
+          privacy,
+          totals,
+          currencies,
+          stats,
+          checklist,
+        },
       },
       null,
       2,
