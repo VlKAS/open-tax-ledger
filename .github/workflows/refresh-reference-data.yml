@@ -15,7 +15,10 @@ concurrency:
 jobs:
   refresh:
     name: Refresh SBI TT BUY and SEC snapshots
-    runs-on: ubuntu-latest
+    # SEC fair-access controls reject the shared Azure/Linux runner egress.
+    # A standard macOS runner keeps the refresh on GitHub-hosted infrastructure
+    # while reaching the same official SEC endpoint directly.
+    runs-on: macos-latest
     timeout-minutes: 15
     permissions:
       contents: write
