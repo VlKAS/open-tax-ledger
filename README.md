@@ -1,172 +1,216 @@
 # OpenTax Ledger
 
-OpenTax Ledger is a privacy-first tool for Indian Interactive Brokers users who
-need CA-reviewable working papers for income tax return preparation.
+![Status](https://img.shields.io/badge/status-v0.2.0-blue)
+![Privacy](https://img.shields.io/badge/privacy-browser--only-0f766e)
+![Node](https://img.shields.io/badge/node-%3E%3D22.13.0-339933)
+![License](https://img.shields.io/badge/license-AGPL--3.0--only-black)
 
-The app is designed to run in the browser. Users import Interactive Brokers
-Activity Statement CSV files, review the normalized ledger, and export draft
-working papers for Indian ITR schedules. It does not log in to Interactive
-Brokers, does not ask for PAN, Aadhaar, brokerage credentials, or income tax
-portal credentials, and does not file returns.
+**OpenTax Ledger** helps Indian Interactive Brokers users turn IBKR Activity
+Statement CSV exports into CA-reviewable working papers for Indian income tax
+return preparation.
 
-> This project is not tax advice. It prepares draft working papers for review by
-> the taxpayer and a qualified Chartered Accountant.
+It runs in the browser, keeps taxpayer files local, and exports draft schedules
+and reconciliation checks. It does **not** log in to IBKR, ask for PAN or
+Aadhaar, connect to the Income Tax Department portal, or file a return.
 
-## Current Scope
+> This project is not tax advice. It prepares draft working papers for review
+> by the taxpayer and a qualified Chartered Accountant.
+
+## 🔗 Links
+
+| Destination | Link |
+| --- | --- |
+| Live app | <https://vlkas.github.io/open-tax-ledger/> |
+| Source repository | <https://github.com/VlKAS/open-tax-ledger> |
+| Roadmap | [docs/roadmap.md](docs/roadmap.md) |
+| Methodology | [docs/methodology.md](docs/methodology.md) |
+| Data provenance | [docs/data-sources.md](docs/data-sources.md) |
+| Threat model | [docs/threat-model.md](docs/threat-model.md) |
+
+## ✨ What It Does
+
+- 📄 Imports Interactive Brokers Activity Statement CSV files.
+- 🧾 Creates draft Schedule CG, Schedule FA, Schedule FSI, and Schedule TR
+  working papers.
+- 🔎 Shows reconciliation checks for missing FX, unsupported instruments,
+  transfers, duplicate rows, and review items.
+- 🏦 Bundles a pinned community USD TT BUY reference table for exact-date lookup.
+- 🏢 Enriches supported tickers with offline SEC EDGAR company, CIK, ticker, and
+  exchange metadata.
+- 🔒 Processes taxpayer CSV files locally in the browser.
+- 🚀 Deploys as a static GitHub Pages app.
+
+## 🚦 Supported Scope
 
 Supported now:
 
-- Interactive Brokers Activity Statement CSV imports.
 - Listed foreign equities and ETFs held through IBKR.
-- Stock trade, dividend, withholding tax, interest, open-position, transfer,
+- Stock trades, dividends, withholding tax, interest, open positions, transfers,
   and optional exchange-rate sections recognized by the current parser.
-- Draft Schedule CG, Schedule FA, Schedule FSI, Schedule TR, and reconciliation
-  checks.
-- A pinned, community-maintained USD TT BUY reference table with exact-date
-  lookup, CSV download, and user-supplied CSV override.
-- Offline SEC EDGAR company-name, ticker, exchange, and CIK enrichment.
-- Browser-only processing: no server upload of taxpayer documents.
-- Static deployment through the checked-in GitHub Pages workflow.
+- Browser-only import, review, and export.
 - Synthetic fixtures only in the repository and test suite.
+- Static deployment through the checked-in GitHub Pages workflow.
 
 Not supported yet:
 
 - Direct ITR JSON generation or e-filing.
 - PAN, Aadhaar, income tax portal login, AIS login, or IBKR login.
-- Tax advice, return position recommendations, or CA sign-off.
-- Futures, options, crypto, bonds, mutual funds, margin interest, corporate
-  actions beyond the explicitly tested cases, or multi-broker consolidation.
+- Tax advice, return-position recommendations, or CA sign-off.
+- Futures, options, crypto, bonds, mutual funds, margin interest, complex
+  corporate actions, or multi-broker consolidation.
 - XLSX exports.
-- An official historical SBI TTBR archive, automatic Rule 115 date selection,
-  or automatic INR conversion from the community reference table.
+- Automatic Rule 115 date selection or automatic INR conversion from the bundled
+  USD TT BUY table.
 - Live prices or a complete global security master.
 
-Roadmap items are tracked in [docs/roadmap.md](docs/roadmap.md).
-
-## Intended Workflow
+## 🧭 How To Use
 
 1. Download an IBKR Activity Statement CSV from Client Portal.
-2. Open OpenTax Ledger locally or from a trusted static deployment.
+2. Open the [live app](https://vlkas.github.io/open-tax-ledger/) or run it
+   locally.
 3. Import the CSV in the browser.
-4. Review parsed trades, positions, dividends, taxes withheld, transfers,
+4. Review parsed trades, dividends, taxes withheld, transfers, positions,
    offline company matches, and FX assumptions.
-5. Determine the prescribed Rule 115 date with a qualified reviewer, then use
-   the exact-date lookup and retain primary evidence. No prior-day fallback is
-   applied.
-6. Export draft schedules and checks.
-7. Share the exported working papers with a CA for review.
-8. Enter final CA-approved values in the official Income Tax Department utility
+5. Determine the prescribed Rule 115 date with a qualified reviewer.
+6. Use the exact-date USD TT BUY lookup and retain primary evidence for material
+   dates. The app does not apply a prior-day fallback.
+7. Export draft schedules and reconciliation checks.
+8. Share the exported working papers with a CA.
+9. Enter final CA-approved values in the official Income Tax Department utility
    or portal.
 
-Official references:
-
-- IBKR statement download guidance:
-  <https://www.ibkrguides.com/complianceportal/howtorunastatement.htm>
-- IBKR Activity Statement API documentation:
-  <https://www.interactivebrokers.com/docs/web-api/account-management/reporting/activity-statements>
-- Income Tax Department ITR utilities:
-  <https://www.incometax.gov.in/iec/foportal/downloads/income-tax-returns>
-- Income Tax Rule 115:
-  <https://www.incometaxindia.gov.in/w/rule-115-2>
-- Income Tax Rule 26 TT buying-rate definition:
-  <https://www.incometaxindia.gov.in/w/rule-26-8>
-- SBI current Forex Card Rates PDF:
-  <https://sbi.bank.in/documents/16012/1400784/FOREX_CARD_RATES.pdf>
-- SEC company ticker and exchange associations:
-  <https://www.sec.gov/files/company_tickers_exchange.json>
-- RBI Liberalised Remittance Scheme master direction:
-  <https://www.rbi.org.in/scripts/notificationuser.aspx?id=10192>
-
-## Privacy Model
-
-OpenTax Ledger is designed around local processing:
-
-- Uploaded CSV files are parsed in the browser process.
-- No taxpayer file should be sent to the project maintainers.
-- No server-side storage is used by the core workflow.
-- No personal identifiers are required. Do not enter PAN, Aadhaar, passport
-  numbers, bank account numbers, income tax portal credentials, or IBKR
-  credentials.
-- Test data must be synthetic. Do not contribute real statements, screenshots,
-  tax forms, broker reports, AIS files, Form 67 records, or CA workpapers.
-
-See [docs/threat-model.md](docs/threat-model.md) for the detailed threat model.
-
-## Methodology
-
-The calculation pipeline is intended to be auditable:
-
-- Preserve the raw imported row lineage.
-- Normalize IBKR rows into a canonical ledger.
-- Convert ledger rows into schedule-specific draft tables.
-- Show assumptions next to computed values.
-- Emit reconciliation checks so reviewers can find missing or inconsistent
-  inputs before using the result.
-
-See [docs/methodology.md](docs/methodology.md) for assumptions, expected inputs,
-and schedule mapping. Dataset provenance, hashes, and limitations are recorded
-in [docs/data-sources.md](docs/data-sources.md).
-
-## Development
+## 🧪 Quick Start For Developers
 
 Prerequisites:
 
 - Node.js `>=22.13.0`
 - npm
 
-Install dependencies:
+Install locked dependencies:
 
 ```bash
-npm install
+npm ci
 ```
 
-Run tests:
+Run the app locally:
+
+```bash
+PORT=3001 npm run dev
+```
+
+Then open <http://localhost:3001/>.
+
+Run parser and reference-data tests:
 
 ```bash
 npm test
 ```
 
-Run the full local check:
+Run the full local release check:
 
 ```bash
 npm run check
 ```
 
-Regenerate checked-in reference assets after intentionally updating the source
-snapshots:
+Build the static client:
+
+```bash
+npm run build
+```
+
+Regenerate checked-in reference assets after intentionally updating pinned
+source snapshots:
 
 ```bash
 npm run data:build
 ```
 
-Start local development:
+The command names are defined in [package.json](package.json).
 
-```bash
-npm run dev
-```
+## 🏦 Reference Data
 
-The command names are defined in [package.json](package.json). If an
-implementation branch has not added the referenced scripts yet, use the current
-branch's package scripts as the source of truth.
+OpenTax Ledger uses local reference data only. The browser does not call SBI,
+SEC, market-data vendors, analytics providers, or project servers while
+processing taxpayer statements.
 
-## GitHub Pages
+### USD TT BUY table
+
+The bundled USD table is derived from the community-maintained
+[`sahilgupta/sbi-fx-ratekeeper`](https://github.com/sahilgupta/sbi-fx-ratekeeper)
+repository and pinned to commit
+`4cea84491ec53b80a5171463e51e04f667bcb6e5`.
+
+Official context:
+
+- [Income Tax Rule 115](https://www.incometaxindia.gov.in/w/rule-115-2)
+- [Income Tax Rule 26 TT buying-rate definition](https://www.incometaxindia.gov.in/w/rule-26-8)
+- [SBI current Forex Card Rates PDF](https://sbi.bank.in/documents/16012/1400784/FOREX_CARD_RATES.pdf)
+
+Important caveats:
+
+- SBI publishes a current mutable PDF, not an official historical CSV archive.
+- The bundled table is a convenience reference, not an official SBI-published
+  historical feed.
+- Lookup is exact-date only. Missing dates and conflicting intraday observations
+  remain review items.
+- The app does not silently substitute RBI rates, broker rates, market rates, or
+  prior-business-day values.
+- The app does not automatically convert schedule values from the bundled table.
+
+### Company metadata
+
+Company metadata is bundled from the SEC EDGAR ticker and exchange associations
+file:
+
+- [SEC EDGAR data access guidance](https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data)
+- [SEC reuse and fair-access guidance](https://www.sec.gov/about/webmaster-frequently-asked-questions)
+- [SEC company ticker and exchange associations](https://www.sec.gov/files/company_tickers_exchange.json)
+
+SEC ticker matches enrich display and audit fields only. They do not establish
+issuer residence, instrument type, treaty eligibility, or tax treatment.
+
+Dataset hashes, record counts, snapshot dates, and refresh rules are maintained
+in [docs/data-sources.md](docs/data-sources.md) and
+[reference-data/README.md](reference-data/README.md).
+
+## 🔒 Privacy And Security
+
+OpenTax Ledger is designed around local processing:
+
+- Uploaded IBKR CSV files are parsed in the browser process.
+- No taxpayer file should be sent to project maintainers.
+- No server-side storage is used by the core workflow.
+- No personal identifiers are required.
+- Test data must be synthetic.
+
+Do not enter or contribute PAN, Aadhaar, passport numbers, bank account numbers,
+income tax portal credentials, IBKR credentials, real statements, screenshots,
+tax forms, AIS files, Form 67 records, or CA workpapers.
+
+Security reporting and private-data handling rules are in
+[SECURITY.md](SECURITY.md). The detailed model is in
+[docs/threat-model.md](docs/threat-model.md).
+
+## 🚀 GitHub Pages Deployment
 
 The workflow at
-[`.github/workflows/pages.yml`](.github/workflows/pages.yml) installs with
-`npm ci`, runs the complete check, uploads `dist/client`, and deploys it to the
-`github-pages` environment on pushes to `main`.
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml):
 
-After creating the repository, open **Settings → Pages** and set the publishing
-source to **GitHub Actions**. The client uses relative asset paths so it works at
-both a user-site root and a project path such as
+1. Installs dependencies with `npm ci`.
+2. Runs `npm run check`.
+3. Uploads `dist/client`.
+4. Deploys the static site to the `github-pages` environment.
+
+For a new repository, open **Settings → Pages** and set the publishing source to
+**GitHub Actions**. The client uses relative asset paths, so it works at both a
+user-site root and a project path such as
 <https://vlkas.github.io/open-tax-ledger/>.
 
-Source repository: <https://github.com/VlKAS/open-tax-ledger>
-
-## Contributing
+## 🤝 Contributing
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or pull request.
-The short version:
+
+Contribution rules:
 
 - Use synthetic data only.
 - Keep tax logic explainable and covered by tests.
@@ -174,14 +218,27 @@ The short version:
   or statutory guidance.
 - Preserve browser-only processing unless a proposal explicitly changes the
   privacy model and updates the threat model.
+- Prefer visible review warnings over hidden tax assumptions.
 
-## Security
+Before opening a pull request:
 
-Do not open public issues with real taxpayer data or private financial records.
-See [SECURITY.md](SECURITY.md) for private reporting guidance and data handling
-rules.
+```bash
+npm test
+npm run check
+```
 
-## License
+## 📚 Official References
+
+- [IBKR statement download guidance](https://www.ibkrguides.com/complianceportal/howtorunastatement.htm)
+- [IBKR Activity Statement API documentation](https://www.interactivebrokers.com/docs/web-api/account-management/reporting/activity-statements)
+- [Income Tax Department ITR utilities](https://www.incometax.gov.in/iec/foportal/downloads/income-tax-returns)
+- [Income Tax Rule 115](https://www.incometaxindia.gov.in/w/rule-115-2)
+- [Income Tax Rule 26 TT buying-rate definition](https://www.incometaxindia.gov.in/w/rule-26-8)
+- [SBI current Forex Card Rates PDF](https://sbi.bank.in/documents/16012/1400784/FOREX_CARD_RATES.pdf)
+- [SEC company ticker and exchange associations](https://www.sec.gov/files/company_tickers_exchange.json)
+- [RBI Liberalised Remittance Scheme master direction](https://www.rbi.org.in/scripts/notificationuser.aspx?id=10192)
+
+## ⚖️ License
 
 Code is licensed under
 [GNU Affero General Public License v3.0 only](https://www.gnu.org/licenses/agpl-3.0.en.html)
@@ -192,6 +249,6 @@ Documentation under `docs/`, `README.md`, `CONTRIBUTING.md`,
 [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/)
 unless a file states otherwise.
 
-Bundled reference data retains its source-specific provenance and limitations;
-see [docs/data-sources.md](docs/data-sources.md) and
+Bundled reference data retains its source-specific provenance and limitations.
+See [docs/data-sources.md](docs/data-sources.md) and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
