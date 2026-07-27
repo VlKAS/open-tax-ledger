@@ -21,6 +21,12 @@ test("parseCsv handles quoted commas, quotes, CRLF, and blank lines", () => {
   ]);
 });
 
+test("parseCsv rejects pathological row, column, and cell shapes", () => {
+  assert.throws(() => parseCsv("a\nb", { maxRows: 1 }), /row limit/);
+  assert.throws(() => parseCsv("a,b", { maxColumns: 1 }), /column limit/);
+  assert.throws(() => parseCsv("abcd", { maxCellCharacters: 3 }), /character limit/);
+});
+
 test("csvCell neutralizes spreadsheet formulas after whitespace or control characters", () => {
   assert.equal(csvCell("=1+1"), "'=1+1");
   assert.equal(csvCell(" \t+1+1"), "' \t+1+1");
@@ -72,6 +78,18 @@ test("buildReviewModel returns the browser-friendly review contract", async () =
   assert.equal(review.assumptions.fxRates.length, 0);
   assert.equal("legacySchedules" in review, false);
   assert.equal("findings" in review, false);
+});
+
+test("review exchange-rate assumptions exclude raw source rows", () => {
+  const csv = [
+    "Exchange Rates,Header,Date,Currency,Rate To INR,Note",
+    "Exchange Rates,Data,2026-01-31,USD,86.5,sensitive free-form note",
+  ].join("\n");
+  const review = buildReviewModel(parseIbkrStatements(csv));
+
+  assert.deepEqual(review.assumptions.fxRates, [
+    { date: "2026-01-31", currency: "USD", rateToInr: 86.5 },
+  ]);
 });
 
 test("review validations conservatively flag missing FX and manual-review events", async () => {
