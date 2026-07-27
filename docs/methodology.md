@@ -14,6 +14,7 @@ Use these sources as the review baseline:
 - AIS/TIS/Form 26AS information downloaded directly by the taxpayer from the
   Income Tax Department portal.
 - CA-reviewed final return position.
+- Retained SBI TT buying-rate evidence for the prescribed Rule 115 dates.
 
 Official references:
 
@@ -23,16 +24,21 @@ Official references:
   <https://www.incometax.gov.in/iec/foportal/downloads/income-tax-returns>
 - RBI Master Direction - Liberalised Remittance Scheme:
   <https://www.rbi.org.in/scripts/notificationuser.aspx?id=10192>
+- Income Tax Rule 115:
+  <https://www.incometaxindia.gov.in/w/rule-115-2>
+- Income Tax Rule 26:
+  <https://www.incometaxindia.gov.in/w/rule-26-8>
 
 ## Pipeline
 
-The intended pipeline has five stages:
+The intended pipeline has six stages:
 
 1. Import the IBKR CSV in the browser.
 2. Parse raw sections and retain row lineage.
 3. Normalize rows into a canonical ledger.
-4. Map ledger entries into draft schedule tables.
-5. Produce reconciliation checks and reviewer warnings.
+4. Enrich supported tickers from the bundled offline SEC reference snapshot.
+5. Map ledger entries into draft schedule tables.
+6. Produce reconciliation checks and reviewer warnings.
 
 Each computed value should be traceable back to source rows. When a value cannot
 be supported by imported evidence, the app should show a warning instead of
@@ -65,6 +71,14 @@ Default assumptions should be visible in the output:
   be linked to supported foreign income.
 - FX conversion must be reviewable and should identify the source and date basis
   used by the implementation.
+- The bundled USD TT BUY table is community-maintained reference material, not
+  an official SBI historical feed. It is never applied to schedule values
+  automatically.
+- USD rate lookup is exact-date only. Missing dates and conflicting intraday
+  observations remain manual review items; the app does not silently use a
+  prior business day, RBI rate, broker rate, or market-rate vendor.
+- SEC ticker matches enrich display and audit fields only. They do not establish
+  issuer residence, instrument type, treaty eligibility, or tax treatment.
 - Rounding must be deterministic and visible in exported outputs.
 
 ## Unsupported Cases
@@ -91,3 +105,6 @@ a draft schedule should be explainable from:
 - A documented assumption.
 - A deterministic calculation rule.
 - A test fixture with expected output.
+
+Reference snapshot provenance and refresh rules are maintained in
+[data-sources.md](data-sources.md).

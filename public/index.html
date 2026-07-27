@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'self'; connect-src 'none'; font-src 'self'; form-action 'self'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'"
+    />
+    <meta
       name="description"
       content="Prepare reviewable Indian ITR working papers from Interactive Brokers Activity Statement CSVs. Local-only, transparent, and open source."
     />
@@ -14,17 +18,17 @@
       content="IBKR statements to CA-reviewable Indian ITR working papers—locally in your browser."
     />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="/og.png" />
+    <meta property="og:image" content="./og.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="OpenTax Ledger" />
     <meta
       name="twitter:description"
       content="Transparent, local-first preparation for foreign portfolio tax review."
     />
-    <meta name="twitter:image" content="/og.png" />
+    <meta name="twitter:image" content="./og.png" />
     <title>OpenTax Ledger — IBKR to Indian ITR working papers</title>
-    <link rel="stylesheet" href="/styles.css" />
-    <script type="module" src="/app.mjs"></script>
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./app.mjs"></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -142,7 +146,7 @@
       <section class="workspace-section" id="workspace">
         <div class="section-heading">
           <div>
-            <span class="section-index">Working preview · v0.1</span>
+            <span class="section-index">Working preview · v0.2</span>
             <h2>Build a CA-review packet in four steps.</h2>
           </div>
           <p>
@@ -290,29 +294,105 @@
                 </label>
               </div>
 
-              <fieldset class="choice-group">
-                <legend>Exchange-rate evidence</legend>
-                <label>
-                  <input type="radio" name="fx-source" value="missing" checked />
-                  <span>
-                    <strong>Mark rates as missing</strong>
-                    <small>Safest default. Exported rows remain draft until rates are supplied.</small>
-                  </span>
-                </label>
-                <label>
-                  <input type="radio" name="fx-source" value="illustrative" />
-                  <span>
-                    <strong>Use illustrative demo rates</strong>
-                    <small>Available only for the synthetic sample; never filing-ready.</small>
-                  </span>
-                </label>
-              </fieldset>
+              <section class="reference-section" aria-labelledby="reference-data-title">
+                <div class="subsection-heading">
+                  <div>
+                    <span class="panel-kicker">Local reference pack</span>
+                    <h4 id="reference-data-title">Check the source before using the number</h4>
+                  </div>
+                  <span class="local-badge">No provider calls</span>
+                </div>
+
+                <div class="reference-grid">
+                  <article class="reference-card">
+                    <span class="reference-provider">USD exchange-rate reference</span>
+                    <h5>SBI FX RateKeeper community archive</h5>
+                    <p data-rate-summary>Loading bundled USD table…</p>
+                    <div class="reference-links">
+                      <a
+                        href="https://github.com/sahilgupta/sbi-fx-ratekeeper"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >Open-source archive</a>
+                      <a
+                        href="https://sbi.bank.in/documents/16012/1400784/FOREX_CARD_RATES.pdf"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >Current official SBI PDF</a>
+                    </div>
+                  </article>
+                  <article class="reference-card">
+                    <span class="reference-provider">Company reference provider</span>
+                    <h5>SEC EDGAR ticker associations</h5>
+                    <p data-company-summary>Loading offline company snapshot…</p>
+                    <div class="reference-links">
+                      <a
+                        href="https://www.sec.gov/files/company_tickers_exchange.json"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >Official SEC source</a>
+                    </div>
+                    <small>Company names only; no prices, issuer-country inference, or live lookup.</small>
+                  </article>
+                </div>
+
+                <div class="reference-actions">
+                  <label class="compact-upload">
+                    <span>Use your own retained SBI reference CSV</span>
+                    <input type="file" accept=".csv,text/csv" data-rate-file-input />
+                  </label>
+                  <a
+                    class="button button-secondary"
+                    href="./data/sbi-usd-tt-buy-community.csv"
+                    download
+                  >Download bundled USD CSV</a>
+                </div>
+                <div class="inline-status" data-rate-status>
+                  Using the bundled, pinned community USD reference table.
+                </div>
+
+                <div class="rate-lookup">
+                  <div>
+                    <span class="panel-kicker">Exact-date lookup</span>
+                    <h5>Find a USD TT BUY observation</h5>
+                    <p>
+                      Choose the prescribed date determined under Rule 115. The app
+                      does not infer that date or substitute the prior business day.
+                    </p>
+                  </div>
+                  <div class="rate-lookup-controls">
+                    <label>
+                      <span>Required rate date</span>
+                      <input type="date" data-rate-lookup-date />
+                    </label>
+                    <button class="button button-secondary" type="button" data-action="lookup-rate">
+                      Look up exact date
+                    </button>
+                  </div>
+                  <div class="rate-result" data-rate-lookup-result aria-live="polite"></div>
+                </div>
+
+                <div class="table-scroll reference-table">
+                  <table class="data-table">
+                    <caption>Latest 12 usable USD observations in the bundled table</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Published at</th>
+                        <th scope="col">TT BUY (INR)</th>
+                        <th scope="col">Evidence</th>
+                      </tr>
+                    </thead>
+                    <tbody data-rate-table-body></tbody>
+                  </table>
+                </div>
+              </section>
 
               <div class="callout callout-warning">
-                <strong>Deliberate limitation</strong>
+                <strong>Community data is not an official historical SBI feed</strong>
                 <p>
-                  v0.1 does not bundle SBI TT buying-rate data. Each taxable event
-                  remains flagged until an authoritative rate pipeline is added.
+                  Rule 115 and Rule 26 point to SBI’s TT buying rate. Verify material
+                  dates against retained primary evidence. The table never converts
+                  a draft schedule automatically.
                 </p>
               </div>
 
@@ -349,6 +429,7 @@
                 <button role="tab" aria-selected="false" data-review-tab="capitalGains">Capital gains</button>
                 <button role="tab" aria-selected="false" data-review-tab="fsi">FSI / TR</button>
                 <button role="tab" aria-selected="false" data-review-tab="fa">Schedule FA</button>
+                <button role="tab" aria-selected="false" data-review-tab="ttbr">USD TTBR</button>
               </div>
               <div class="review-content" data-review-content>
                 <div class="empty-review">
@@ -506,13 +587,15 @@
 
         <div class="boundary-grid">
           <article>
-            <span class="boundary-label supported">Included in v0.1</span>
+            <span class="boundary-label supported">Included in v0.2</span>
             <h3>Conservative first scope</h3>
             <ul>
               <li>IBKR Activity Statement CSV section parsing</li>
               <li>Foreign-listed equity and ETF source rows</li>
               <li>Dividends, withholding, interest, and open positions</li>
               <li>Draft CG / FSI / TR / FA review tables</li>
+              <li>Pinned community USD TT BUY table and local CSV override</li>
+              <li>Offline SEC company, ticker, exchange, and CIK associations</li>
               <li>Validation findings and source audit counts</li>
             </ul>
           </article>
@@ -523,7 +606,7 @@
               <li>Direct ITR or Form 67 submission</li>
               <li>Options, futures, shorts, bonds, forex, or business-income classification</li>
               <li>Corporate actions and transferred-in lots with missing basis</li>
-              <li>Authoritative SBI TTBR data redistribution</li>
+              <li>An official historical SBI archive or automatic Rule 115 date selection</li>
               <li>Final tax liability or professional advice</li>
             </ul>
           </article>
@@ -540,7 +623,11 @@
             they add automation.
           </p>
           <div class="source-actions">
-            <a class="button button-inverse" href="#source-code" id="github-link">
+            <a
+              class="button button-inverse"
+              href="https://github.com/VlKAS/open-tax-ledger"
+              id="github-link"
+            >
               GitHub repository
             </a>
             <a class="text-link" href="#calculation-model">Read supported scope →</a>
@@ -554,15 +641,21 @@
           <pre><code>lib/
   ibkr.js
   export.js
+  reference-data.js
 public/
   app.mjs
+  data/
 fixtures/
   demo-activity.csv     # synthetic
 docs/
+  data-sources.md
   methodology.md
   threat-model.md
+.github/workflows/
+  pages.yml
 tests/
   parser.test.mjs
+  reference-data.test.mjs
 
 License: AGPL-3.0-only
 Network calls: none</code></pre>

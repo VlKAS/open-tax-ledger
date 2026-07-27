@@ -38,11 +38,6 @@ await rm(outputDirectory, { force: true, recursive: true });
 await mkdir(clientDirectory, { recursive: true });
 await cp(publicDirectory, clientDirectory, { recursive: true });
 await cp(libraryDirectory, join(clientDirectory, "lib"), { recursive: true });
-await mkdir(join(outputDirectory, ".openai"), { recursive: true });
-await cp(
-  join(root, ".openai", "hosting.json"),
-  join(outputDirectory, ".openai", "hosting.json"),
-);
 
 const files = await listFiles(clientDirectory);
 const assets = {};

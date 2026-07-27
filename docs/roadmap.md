@@ -9,6 +9,9 @@ is available today.
 - Draft working papers for Schedule CG, Schedule FA, Schedule FSI, Schedule TR,
   and checks.
 - Scope limited to supported equity and ETF flows.
+- Exact-date USD TT BUY community-reference lookup and downloadable CSV.
+- Offline SEC company metadata enrichment with source provenance.
+- GitHub Pages deployment workflow.
 - Synthetic fixtures only.
 
 ## Near-Term
@@ -25,12 +28,14 @@ is available today.
 - XLSX export for CA-facing review packs.
 - Assessment-year specific schedule templates.
 - Expanded corporate-action handling after test fixtures exist.
-- More explicit FX-source configuration and audit output.
+- More explicit prescribed-date guidance and rate-evidence audit output.
 - Better import diagnostics for unsupported IBKR sections.
 
 ## Later
 
-- Authoritative TTBR pipeline.
+- An official or expressly licensed historical SBI TTBR source, if one becomes
+  available.
+- Optional privacy-reviewed identifier resolution for non-SEC securities.
 - Optional locally generated ITR utility crosswalks.
 - Multi-account consolidation.
 - Additional brokers, only after the IBKR pipeline is stable.

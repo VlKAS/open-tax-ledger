@@ -1,18 +1,28 @@
 {
   "name": "open-tax-ledger",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Privacy-first IBKR statement preparation for Indian ITR review",
   "private": true,
   "license": "AGPL-3.0-only",
+  "homepage": "https://vlkas.github.io/open-tax-ledger/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VlKAS/open-tax-ledger.git"
+  },
+  "bugs": {
+    "url": "https://github.com/VlKAS/open-tax-ledger/issues"
+  },
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
+    "data:build": "node scripts/generate-reference-data.mjs",
+    "data:check": "node scripts/generate-reference-data.mjs --check",
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
-    "test": "node --test tests/parser.test.mjs",
+    "test": "node --test tests/parser.test.mjs tests/reference-data.test.mjs tests/pages-workflow.test.mjs",
     "test:render": "npm run build && node --test tests/rendered-html.test.mjs",
-    "check": "npm run test && npm run test:render",
+    "check": "npm run data:check && npm run test && npm run test:render",
     "start": "node scripts/dev.mjs"
   },
   "type": "module"

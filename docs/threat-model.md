@@ -22,8 +22,9 @@ credentials, passport numbers, or bank credentials.
 | Boundary | Expected behavior |
 | --- | --- |
 | Browser | Parses and computes locally for the core workflow |
-| Static app assets | May be fetched from the deployment host |
+| Static app assets | May be fetched from the deployment host, including bundled reference snapshots |
 | User files | Stay in the browser unless the user exports them |
+| SBI / SEC / market-data providers | Receive no runtime requests from the core app |
 | Repository fixtures | Synthetic only |
 | Maintainers | Should never receive real taxpayer files through issues or pull requests |
 
@@ -33,6 +34,7 @@ credentials, passport numbers, or bank credentials.
 - A regression that sends imported CSV content to a server.
 - Persistent storage of sensitive rows without clear user action.
 - Third-party scripts or analytics that can observe imported data.
+- A runtime reference-data lookup that leaks ticker or statement context.
 - Error reporting that includes source rows or generated schedule values.
 - Cross-site scripting that exposes imported statement data.
 - Misleading outputs that appear final or filing-ready.
@@ -57,6 +59,9 @@ Required controls for the core workflow:
 - No PAN or Aadhaar fields.
 - No analytics on imported data.
 - No server upload for imported statements.
+- No runtime SBI, SEC, OpenFIGI, or other market-data requests.
+- Reference snapshots are loaded as same-origin static modules; user-selected
+  SBI CSV overrides are parsed locally.
 - No real taxpayer fixtures.
 - Clear draft and CA-review labels on generated outputs.
 - Review warnings for unsupported or ambiguous rows.
@@ -79,6 +84,7 @@ or hosting:
 - [ ] Does the change send source CSV content over the network?
 - [ ] Does it store source rows outside the browser?
 - [ ] Does it add analytics, logging, or error reporting around imported data?
+- [ ] Does it add a remote reference-data call or send identifiers to a provider?
 - [ ] Does it request identity, PAN, Aadhaar, broker, or portal credentials?
 - [ ] Does it add real or derived taxpayer data to the repository?
 - [ ] Does the UI still describe outputs as draft working papers?

@@ -37,7 +37,9 @@ Expected draft outputs:
 4. Review realized gains, acquisition dates, disposal dates, quantities, and
    source-row traceability.
 5. Review dividend rows and withholding tax linkage.
-6. Review FX source, date basis, and rounding.
+6. Determine each prescribed date under Rule 115, perform an exact-date lookup,
+   and retain the primary SBI evidence. Do not treat a broker FX rate, a
+   prior-day fallback, or the bundled community table alone as final support.
 7. Compare foreign income and tax relief working papers against AIS/TIS/Form
    26AS and broker reports.
 8. Review Schedule FA asset/account disclosures against year-end and peak-value
@@ -57,6 +59,8 @@ OpenTax Ledger intentionally does not decide:
 - Treaty eligibility.
 - Characterization for unsupported instruments.
 - Treatment of ambiguous corporate actions.
+- Selection among missing or conflicting TT buying-rate observations.
+- Issuer residence or treaty treatment from an SEC ticker match.
 - Whether a filing position is complete or defensible.
 
 Use the checks output to identify manual review areas before finalizing the

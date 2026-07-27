@@ -2,8 +2,33 @@ import {
   buildReviewModel,
   makeDemoReview,
   parseIbkrStatements,
-} from "/lib/ibkr.js";
-import { csvCell } from "/lib/export.js";
+} from "./lib/ibkr.js";
+import { csvCell } from "./lib/export.js";
+import {
+  enrichReviewWithReferenceData,
+  lookupUsdTtBuyRate,
+  parseSbiReferenceRatesCsv,
+  parseSecCompanyTickersExchange,
+} from "./lib/reference-data.js";
+import {
+  BUNDLED_SBI_USD_CSV,
+  BUNDLED_SEC_COMPANY_JSON,
+} from "./lib/reference-data.generated.js";
+
+const BUNDLED_USD_TT_BUY_RATES = parseSbiReferenceRatesCsv(BUNDLED_SBI_USD_CSV, {
+  provider: "SBI FX RateKeeper community archive",
+  sourceUrl: "https://github.com/sahilgupta/sbi-fx-ratekeeper",
+  license: "MIT repository · community-derived reference data",
+  asOf: "2026-07-27",
+});
+const BUNDLED_COMPANY_LOOKUP = parseSecCompanyTickersExchange(
+  BUNDLED_SEC_COMPANY_JSON,
+  {
+    provider: "SEC EDGAR company_tickers_exchange",
+    sourceUrl: "https://www.sec.gov/files/company_tickers_exchange.json",
+    asOf: "2026-07-24",
+  },
+);
 
 const state = {
   currentStep: "import",
@@ -11,6 +36,8 @@ const state = {
   review: null,
   reviewTab: "overview",
   sourceKind: null,
+  rateSourceKind: "bundled-community",
+  usdTtBuyRates: BUNDLED_USD_TT_BUY_RATES,
 };
 
 const MAX_FILE_COUNT = 5;
@@ -26,11 +53,25 @@ const elements = {
   importStatus: document.querySelector("[data-import-status]"),
   issueCount: document.querySelector("[data-issue-count]"),
   processButton: document.querySelector('[data-action="process"]'),
+  rateFileInput: document.querySelector("[data-rate-file-input]"),
+  rateLookupDate: document.querySelector("[data-rate-lookup-date]"),
+  rateLookupResult: document.querySelector("[data-rate-lookup-result]"),
+  rateStatus: document.querySelector("[data-rate-status]"),
+  rateSummary: document.querySelector("[data-rate-summary]"),
+  rateTableBody: document.querySelector("[data-rate-table-body]"),
   reviewContent: document.querySelector("[data-review-content]"),
   reviewStamp: document.querySelector("[data-review-stamp]"),
+  companySummary: document.querySelector("[data-company-summary]"),
   toast: document.querySelector("[data-toast]"),
   validationList: document.querySelector("[data-validation-list]"),
 };
+
+function withReferenceData(review) {
+  return enrichReviewWithReferenceData(review, {
+    companyLookup: BUNDLED_COMPANY_LOOKUP,
+    usdTtBuyRates: state.usdTtBuyRates,
+  });
+}
 
 function selectStep(step) {
   if (!stepOrder.includes(step)) return;
@@ -76,6 +117,159 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function safeExternalUrl(value) {
+  try {
+    const url = new URL(String(value ?? ""));
+    return url.protocol === "https:" ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function setRateStatus(message, kind = "") {
+  elements.rateStatus.textContent = message;
+  elements.rateStatus.className = `inline-status${kind ? ` is-${kind}` : ""}`;
+}
+
+function appendTextCell(row, value) {
+  const cell = document.createElement("td");
+  cell.textContent = String(value ?? "—");
+  row.append(cell);
+}
+
+function renderReferenceData() {
+  const rates = state.usdTtBuyRates.records;
+  const first = rates[0]?.date ?? "—";
+  const last = rates.at(-1)?.date ?? "—";
+  elements.rateSummary.textContent =
+    `${rates.length.toLocaleString("en-IN")} usable USD rows · ${first} to ${last}`;
+  elements.companySummary.textContent =
+    `${BUNDLED_COMPANY_LOOKUP.count.toLocaleString("en-IN")} SEC ticker associations · snapshot 24 Jul 2026`;
+
+  elements.rateTableBody.replaceChildren();
+  rates
+    .slice(-12)
+    .reverse()
+    .forEach((rate) => {
+      const row = document.createElement("tr");
+      appendTextCell(row, rate.timestamp);
+      appendTextCell(row, formatNumber(rate.ttBuy));
+
+      const evidence = document.createElement("td");
+      const href = safeExternalUrl(rate.sourceUrl);
+      if (href) {
+        const link = document.createElement("a");
+        link.href = href;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent =
+          state.rateSourceKind === "user-supplied"
+            ? "User-supplied evidence URL"
+            : "Archived evidence";
+        evidence.append(link);
+      } else {
+        evidence.textContent = "Source URL unavailable";
+      }
+      row.append(evidence);
+      elements.rateTableBody.append(row);
+    });
+}
+
+function renderRateLookup() {
+  const match = lookupUsdTtBuyRate(
+    state.usdTtBuyRates,
+    elements.rateLookupDate.value,
+  );
+  elements.rateLookupResult.replaceChildren();
+
+  const message = document.createElement("p");
+  if (match.status === "invalid-date") {
+    message.textContent = "Choose a date to perform an exact-date lookup.";
+    elements.rateLookupResult.append(message);
+    return;
+  }
+  if (match.status === "missing") {
+    message.textContent =
+      `No usable USD TT BUY row exists for ${match.date}. No prior-day or market-rate fallback was applied.`;
+    elements.rateLookupResult.append(message);
+    return;
+  }
+  if (match.status === "ambiguous") {
+    message.textContent =
+      `${match.observations.length} different intraday observations exist for ${match.date}. No rate was selected automatically.`;
+    elements.rateLookupResult.append(message);
+    const list = document.createElement("ul");
+    match.observations.forEach((observation) => {
+      const item = document.createElement("li");
+      item.textContent = `${observation.timestamp}: ₹${formatNumber(observation.rate)} per USD`;
+      list.append(item);
+    });
+    elements.rateLookupResult.append(list);
+    return;
+  }
+
+  const strong = document.createElement("strong");
+  strong.textContent = `${match.date}: ₹${formatNumber(match.rate)} per USD`;
+  message.append(strong, document.createTextNode(" · community reference"));
+  elements.rateLookupResult.append(message);
+
+  const href = safeExternalUrl(match.sourceUrl);
+  if (href) {
+    const link = document.createElement("a");
+    link.href = href;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent =
+      state.rateSourceKind === "user-supplied"
+        ? "Open user-supplied evidence URL"
+        : "Open archived source evidence";
+    elements.rateLookupResult.append(link);
+  }
+}
+
+async function importRateFile() {
+  const file = elements.rateFileInput.files?.[0];
+  if (!file) return;
+  if (!(file.name.toLowerCase().endsWith(".csv") || file.type === "text/csv")) {
+    setRateStatus("Choose a CSV file containing DATE and TT BUY columns.", "error");
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    setRateStatus("Reference CSVs larger than 5 MB are not accepted.", "error");
+    return;
+  }
+
+  try {
+    const table = parseSbiReferenceRatesCsv(await file.text(), {
+      provider: `Local reference CSV · ${file.name}`,
+      license: "User supplied",
+      asOf: new Date(file.lastModified || Date.now()).toISOString().slice(0, 10),
+    });
+    if (table.count === 0) {
+      throw new Error("No positive TT BUY rows were found");
+    }
+    state.usdTtBuyRates = table;
+    state.rateSourceKind = "user-supplied";
+    if (state.review) {
+      state.review = withReferenceData(state.review);
+      renderReview();
+    }
+    renderReferenceData();
+    renderRateLookup();
+    setRateStatus(
+      `Loaded ${table.count.toLocaleString("en-IN")} usable USD rates from ${file.name}.`,
+      "success",
+    );
+  } catch (error) {
+    setRateStatus(
+      error instanceof Error
+        ? `Could not use this rate CSV: ${error.message}`
+        : "Could not use this rate CSV.",
+      "error",
+    );
+  }
 }
 
 function setImportStatus(message, kind = "") {
@@ -194,7 +388,7 @@ async function processFiles() {
     const parsed = parseIbkrStatements(csvs, {
       fileNames: state.files.map((file) => file.name),
     });
-    state.review = buildReviewModel(parsed);
+    state.review = withReferenceData(buildReviewModel(parsed));
     state.sourceKind = "user";
     renderReview();
     setImportStatus(
@@ -217,7 +411,7 @@ async function processFiles() {
 }
 
 function loadDemo() {
-  state.review = makeDemoReview();
+  state.review = withReferenceData(makeDemoReview());
   state.sourceKind = "demo";
   state.files = [];
   updateFileList();
@@ -227,12 +421,15 @@ function loadDemo() {
 }
 
 function getConfig() {
-  return Object.fromEntries(
-    [...document.querySelectorAll("[data-config]")].map((input) => [
-      input.dataset.config,
-      input.value,
-    ]),
-  );
+  return {
+    ...Object.fromEntries(
+      [...document.querySelectorAll("[data-config]")].map((input) => [
+        input.dataset.config,
+        input.value,
+      ]),
+    ),
+    rateSource: state.rateSourceKind,
+  };
 }
 
 function humanizeKey(key) {
@@ -254,8 +451,9 @@ function renderTable(rows, columns) {
     .slice(0, 50)
     .map((row) => {
       const cells = columns
-        .map(({ key, format }) => {
-          const value = format === "number" ? formatNumber(row[key]) : row[key];
+        .map(({ key, format, value: getValue }) => {
+          const rawValue = getValue ? getValue(row) : row[key];
+          const value = format === "number" ? formatNumber(rawValue) : rawValue;
           return `<td>${escapeHtml(value === true ? "Rate needed" : value === false ? "Ready" : value)}</td>`;
         })
         .join("");
@@ -297,6 +495,16 @@ function renderReviewTab() {
           <strong>${escapeHtml(formatNumber(totals.openPositionValue))}</strong>
           <span>Peak value and Rule 115 conversion not inferred</span>
         </div>
+        <div class="summary-block">
+          <small>Reference coverage</small>
+          <strong>${escapeHtml(state.review.referenceData.companyLookup.records.toLocaleString("en-IN"))}</strong>
+          <span>Offline SEC ticker associations · no live provider call</span>
+        </div>
+        <div class="summary-block">
+          <small>USD TT BUY reference</small>
+          <strong>${escapeHtml(state.review.referenceData.usdTtBuyRates.records.toLocaleString("en-IN"))}</strong>
+          <span>Community archive rows · exact-date lookup only</span>
+        </div>
       </div>`;
     return;
   }
@@ -304,6 +512,8 @@ function renderReviewTab() {
   if (state.reviewTab === "capitalGains") {
     elements.reviewContent.innerHTML = renderTable(schedules.capitalGains, [
       { key: "symbol", label: "Symbol" },
+      { label: "Company", value: (row) => row.company?.name || "Unmatched" },
+      { label: "Exchange", value: (row) => row.company?.exchange || "—" },
       { key: "date", label: "Transfer date" },
       { key: "currency", label: "CCY" },
       { key: "quantitySold", label: "Qty", format: "number" },
@@ -325,6 +535,7 @@ function renderReviewTab() {
     elements.reviewContent.innerHTML = renderTable([...income, ...relief], [
       { key: "workingPaper", label: "Paper" },
       { key: "incomeType", label: "Type" },
+      { label: "Company", value: (row) => row.company?.name || "Unmatched" },
       { key: "date", label: "Date" },
       { key: "currency", label: "CCY" },
       { key: "description", label: "Source description" },
@@ -334,9 +545,27 @@ function renderReviewTab() {
     return;
   }
 
+  if (state.reviewTab === "ttbr") {
+    const rows = state.usdTtBuyRates.records.slice(-50).reverse();
+    elements.reviewContent.innerHTML = `
+      <div class="reference-table-note">
+        <strong>USD TT BUY community reference</strong>
+        <span>Latest 50 usable dates. No prior-day fallback and no automatic tax conversion.</span>
+        <a href="./data/sbi-usd-tt-buy-community.csv" download>Download the complete CSV</a>
+      </div>
+      ${renderTable(rows, [
+        { key: "timestamp", label: "Published at" },
+        { key: "currency", label: "Currency" },
+        { key: "ttBuy", label: "TT BUY (INR)", format: "number" },
+      ])}`;
+    return;
+  }
+
   elements.reviewContent.innerHTML = renderTable(schedules.fa, [
     { key: "assetCategory", label: "Asset class" },
     { key: "symbol", label: "Symbol" },
+    { label: "Company", value: (row) => row.company?.name || "Unmatched" },
+    { label: "Exchange", value: (row) => row.company?.exchange || "—" },
     { key: "currency", label: "CCY" },
     { key: "quantity", label: "Quantity", format: "number" },
     { key: "value", label: "Closing value", format: "number" },
@@ -445,6 +674,19 @@ function reportTable(title, rows) {
   return `<h2>${escapeHtml(title)}</h2><table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
+function flattenCompany(row) {
+  const { company, ...rest } = row;
+  if (!company) return rest;
+  return {
+    ...rest,
+    companyName: company.name,
+    companyExchange: company.exchange,
+    companyCik: company.cik,
+    companyMatch: company.status,
+    companyProvider: company.provider,
+  };
+}
+
 function makeReport() {
   const config = getConfig();
   const review = state.review;
@@ -468,10 +710,14 @@ body{font-family:Arial,sans-serif;color:#171512;margin:40px;line-height:1.45}h1,
 <div><small>Residential status</small>${escapeHtml(config.residentialStatus)}</div>
 <div><small>Return assumption</small>${escapeHtml(config.returnForm)}</div>
 </div>
-${reportTable("Capital Gains working table", review.schedules.capitalGains)}
-${reportTable("Schedule FSI working table", review.schedules.fsi)}
-${reportTable("Schedule TR working table", review.schedules.tr)}
-${reportTable("Schedule FA working table", review.schedules.fa)}
+${reportTable("Capital Gains working table", review.schedules.capitalGains.map(flattenCompany))}
+${reportTable("Schedule FSI working table", review.schedules.fsi.map(flattenCompany))}
+${reportTable("Schedule TR working table", review.schedules.tr.map(flattenCompany))}
+${reportTable("Schedule FA working table", review.schedules.fa.map(flattenCompany))}
+${reportTable("Reference-data provenance", [
+  review.referenceData.usdTtBuyRates,
+  review.referenceData.companyLookup,
+])}
 ${reportTable("Validation register", validationRows)}
 <h2>Required professional review</h2>
 <ul>${review.checklist.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
@@ -509,6 +755,7 @@ function exportJson() {
     currencies,
     stats,
     checklist,
+    referenceData,
   } = state.review;
   downloadBlob(
     "opentax-ledger-audit.json",
@@ -516,7 +763,7 @@ function exportJson() {
     JSON.stringify(
       {
         product: "OpenTax Ledger",
-        version: "0.1.0",
+        version: "0.2.0",
         exportedAt: new Date().toISOString(),
         config: getConfig(),
         review: {
@@ -531,6 +778,7 @@ function exportJson() {
           currencies,
           stats,
           checklist,
+          referenceData,
         },
       },
       null,
@@ -547,10 +795,10 @@ function exportCsv() {
   }
 
   const scheduleEntries = [
-    ["Capital Gains", state.review.schedules.capitalGains],
-    ["FSI", state.review.schedules.fsi],
-    ["TR", state.review.schedules.tr],
-    ["FA", state.review.schedules.fa],
+    ["Capital Gains", state.review.schedules.capitalGains.map(flattenCompany)],
+    ["FSI", state.review.schedules.fsi.map(flattenCompany)],
+    ["TR", state.review.schedules.tr.map(flattenCompany)],
+    ["FA", state.review.schedules.fa.map(flattenCompany)],
   ];
   const columns = [
     "schedule",
@@ -572,11 +820,18 @@ function resetSession() {
   state.review = null;
   state.reviewTab = "overview";
   state.sourceKind = null;
+  state.rateSourceKind = "bundled-community";
+  state.usdTtBuyRates = BUNDLED_USD_TT_BUY_RATES;
   elements.fileInput.value = "";
+  elements.rateFileInput.value = "";
+  elements.rateLookupDate.value = "";
   document.querySelectorAll("[data-review-tab]").forEach((button) => {
     button.setAttribute("aria-selected", String(button.dataset.reviewTab === "overview"));
   });
   updateFileList();
+  renderReferenceData();
+  renderRateLookup();
+  setRateStatus("Using the bundled, pinned community USD reference table.");
   renderReview();
   selectStep("import");
   showToast("Local session cleared.");
@@ -591,6 +846,10 @@ document.querySelectorAll("[data-step-target], [data-go-step]").forEach((button)
 elements.fileInput.addEventListener("change", () => {
   addFiles(elements.fileInput.files ?? []);
 });
+elements.rateFileInput.addEventListener("change", importRateFile);
+document
+  .querySelector('[data-action="lookup-rate"]')
+  .addEventListener("click", renderRateLookup);
 
 const dropZone = document.querySelector("[data-drop-zone]");
 dropZone.addEventListener("dragover", (event) => {
@@ -629,5 +888,7 @@ document.querySelector('[data-export="json"]').addEventListener("click", exportJ
 document.querySelector('[data-export="csv"]').addEventListener("click", exportCsv);
 
 updateFileList();
+renderReferenceData();
+renderRateLookup();
 renderReview();
 selectStep("import");

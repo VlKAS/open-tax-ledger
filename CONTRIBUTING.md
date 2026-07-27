@@ -76,6 +76,17 @@ For calculation or schedule-mapping changes, include:
 Do not add silent fallbacks for ambiguous tax treatment. Emit a review warning
 instead.
 
+## Reference-Data Changes
+
+Do not update bundled TT BUY or company metadata by copying an unpinned live
+URL into the app. Follow [`reference-data/README.md`](reference-data/README.md):
+
+- Pin community sources to a commit.
+- Preserve the exact SEC snapshot.
+- Recalculate hashes, counts, coverage, and provenance.
+- Do not add SBI PDFs or live provider calls.
+- Run `npm run data:build` followed by `npm run check`.
+
 ## Pull Request Checklist
 
 Before opening a pull request:

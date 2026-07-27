@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "generatedOn": "2026-07-27",
+  "datasets": {
+    "sbiUsdTtBuyCommunity": {
+      "provider": "SBI FX RateKeeper community archive",
+      "repository": "https://github.com/sahilgupta/sbi-fx-ratekeeper",
+      "sourceCommit": "4cea84491ec53b80a5171463e51e04f667bcb6e5",
+      "sourcePath": "csv_files/SBI_REFERENCE_RATES_USD.csv",
+      "upstreamSha256": "5e4633125e0cc91d05cac3823e7435081badd0cf36ec81d16e634e2fe9907049",
+      "normalizedSha256": "5a6e604c4f4366479515ea53fc18c47f29b970f6a94fbd9c38972fa58da12db2",
+      "records": 1551,
+      "coverage": {
+        "first": "2020-01-06",
+        "last": "2026-07-27"
+      },
+      "normalization": [
+        "Keep DATE, TT BUY, and source URL only",
+        "Pin legacy and current repository evidence URLs to the source commit",
+        "Exclude zero and invalid TT BUY values",
+        "Preserve conflicting intraday observations",
+        "Do not fill missing dates"
+      ],
+      "licenseNote": "Upstream repository declares MIT; data is community-derived and is not an official SBI archive.",
+      "officialCurrentSource": "https://sbi.bank.in/documents/16012/1400784/FOREX_CARD_RATES.pdf"
+    },
+    "secCompanyTickersExchange": {
+      "provider": "SEC EDGAR",
+      "source": "https://www.sec.gov/files/company_tickers_exchange.json",
+      "lastModified": "2026-07-24T13:32:36Z",
+      "sha256": "e6fbad74d63540e73239f257809cf217b9d6b4fed2410691f0c8c576c9a6cf3c",
+      "records": 10432,
+      "fields": [
+        "cik",
+        "name",
+        "ticker",
+        "exchange"
+      ],
+      "scopeNote": "SEC filers and SEC-maintained ticker associations only; not a global security master."
+    }
+  }
+}
