@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -246,6 +246,17 @@ function normalizedHttpDate(value, fallback) {
     : parsed.toISOString().replace(".000Z", "Z");
 }
 
+class ReferenceFetchError extends Error {
+  constructor(url, response, retryable) {
+    super(
+      `Failed to fetch ${url}: ${response.status} ${response.statusText}`.trim(),
+    );
+    this.name = "ReferenceFetchError";
+    this.retryable = retryable;
+    this.status = response.status;
+  }
+}
+
 async function fetchText(
   fetchImpl,
   url,
@@ -277,7 +288,6 @@ async function fetchText(
       };
     }
 
-    const body = await response.text().catch(() => "");
     const retryable = [403, 429, 500, 502, 503, 504].includes(response.status);
     const configuredDelay = retryDelaysMs[attempt];
     if (retryable && configuredDelay !== undefined) {
@@ -292,9 +302,7 @@ async function fetchText(
       continue;
     }
 
-    throw new Error(
-      `Failed to fetch ${url}: ${response.status} ${response.statusText} ${body.slice(0, 500)}`,
-    );
+    throw new ReferenceFetchError(url, response, retryable);
   }
 }
 
@@ -303,6 +311,8 @@ async function fetchLatestSources(
   githubToken,
   currentSecRaw,
   currentSecLastModified,
+  allowStaleSec,
+  secRetryDelaysMs,
 ) {
   const githubHeaders = {
     Accept: "application/vnd.github+json",
@@ -344,12 +354,31 @@ async function fetchLatestSources(
       ? { "If-Modified-Since": conditionalDate.toUTCString() }
       : {}),
   };
-  const secResponse = await fetchText(fetchImpl, REFERENCE_SOURCES.sec, {
-    allowNotModified: true,
-    headers: secHeaders,
-    maxBytes: 20_000_000,
-    retryDelaysMs: [2_000, 8_000, 20_000],
-  });
+  let secResponse;
+  let secFetchError = "";
+  try {
+    secResponse = await fetchText(fetchImpl, REFERENCE_SOURCES.sec, {
+      allowNotModified: true,
+      headers: secHeaders,
+      maxBytes: 20_000_000,
+      retryDelaysMs: secRetryDelaysMs,
+    });
+  } catch (error) {
+    if (!allowStaleSec) throw error;
+    const canRetainStale =
+      error instanceof TypeError ||
+      (error instanceof ReferenceFetchError && error.retryable);
+    if (!canRetainStale) throw error;
+    secFetchError = error instanceof Error ? error.message : String(error);
+    const summary = secFetchError
+      .split(/\r?\n/, 1)[0]
+      .replaceAll("%", "%25")
+      .replaceAll("\r", "%0D")
+      .replaceAll("\n", "%0A");
+    console.warn(
+      `::warning title=SEC refresh deferred::${summary}. Retaining the last verified SEC snapshot.`,
+    );
+  }
 
   return {
     sbi: {
@@ -357,11 +386,33 @@ async function fetchLatestSources(
       rawText: sbiResponse.text,
     },
     sec: {
-      rawText: secResponse.notModified ? currentSecRaw : secResponse.text,
+      rawText:
+        !secResponse || secResponse.notModified
+          ? currentSecRaw
+          : secResponse.text,
       lastModified:
-        secResponse.headers.get("last-modified") ?? currentSecLastModified,
+        secResponse?.headers.get("last-modified") ?? currentSecLastModified,
+      staleReason: secFetchError,
+      verified: Boolean(secResponse),
     },
   };
+}
+
+function assertSecStaleness(lastModified, now, maxStaleDays) {
+  const lastVerified = new Date(lastModified);
+  if (Number.isNaN(lastVerified.getTime())) {
+    throw new Error("SEC last-verified date is invalid; stale fallback is unsafe");
+  }
+  const ageMs = now.getTime() - lastVerified.getTime();
+  if (ageMs < -24 * 60 * 60 * 1_000) {
+    throw new Error("SEC last-verified date is unexpectedly in the future");
+  }
+  if (ageMs > maxStaleDays * 24 * 60 * 60 * 1_000) {
+    throw new Error(
+      `SEC snapshot is older than ${maxStaleDays} days; a fresh official snapshot is required`,
+    );
+  }
+  return lastVerified.toISOString().replace(".000Z", "Z");
 }
 
 function buildManifest({
@@ -373,6 +424,7 @@ function buildManifest({
   secJson,
   secSnapshot,
   secLastModified,
+  secVerified,
 }) {
   const coverage = parseSbiCoverage(sbiCsv);
   const secPayload = parseSecPayload(secJson);
@@ -393,17 +445,19 @@ function buildManifest({
           last: coverage.last,
         },
       },
-      secCompanyTickersExchange: {
-        ...current.datasets.secCompanyTickersExchange,
-        lastModified: normalizedHttpDate(
-          secLastModified,
-          current.datasets.secCompanyTickersExchange.lastModified,
-        ),
-        upstreamSha256: sha256(secSnapshot),
-        sha256: sha256(secSnapshot),
-        records: secPayload.data.length,
-        fields: secPayload.fields,
-      },
+      secCompanyTickersExchange: secVerified
+        ? {
+            ...current.datasets.secCompanyTickersExchange,
+            lastModified: normalizedHttpDate(
+              secLastModified,
+              current.datasets.secCompanyTickersExchange.lastModified,
+            ),
+            upstreamSha256: sha256(secSnapshot),
+            sha256: sha256(secSnapshot),
+            records: secPayload.data.length,
+            fields: secPayload.fields,
+          }
+        : current.datasets.secCompanyTickersExchange,
     },
   };
 }
@@ -438,6 +492,9 @@ export async function runReferenceDataPipeline({
   fetchImpl = globalThis.fetch,
   githubToken = "",
   now = new Date(),
+  allowStaleSec = false,
+  maxStaleSecDays = 30,
+  secRetryDelaysMs = [2_000, 8_000, 20_000],
 } = {}) {
   if (!["build", "check", "refresh"].includes(mode)) {
     throw new Error(`Unsupported reference-data mode: ${mode}`);
@@ -487,7 +544,26 @@ export async function runReferenceDataPipeline({
     githubToken,
     currentSecRaw,
     currentManifest.datasets.secCompanyTickersExchange.lastModified,
+    allowStaleSec,
+    secRetryDelaysMs,
   );
+  const reportedSecLastModified = normalizedHttpDate(
+    remote.sec.lastModified,
+    normalizedHttpDate(
+      currentManifest.datasets.secCompanyTickersExchange.lastModified,
+      "",
+    ),
+  );
+  if (!reportedSecLastModified) {
+    throw new Error("SEC last-verified date is invalid");
+  }
+  if (!remote.sec.verified) {
+    assertSecStaleness(
+      reportedSecLastModified,
+      now,
+      maxStaleSecDays,
+    );
+  }
   const nextSbiCsv = normalizeSbiCsv(remote.sbi.rawText, remote.sbi.sourceCommit);
   const nextSecJson = normalizeSecJson(remote.sec.rawText);
   assertRefreshSafety(currentSbiCsv, nextSbiCsv, currentSecJson, nextSecJson);
@@ -496,10 +572,12 @@ export async function runReferenceDataPipeline({
     remote.sbi.sourceCommit !== currentCommit ||
     sha256(remote.sbi.rawText) !==
       currentManifest.datasets.sbiUsdTtBuyCommunity.upstreamSha256 ||
-    sha256(remote.sec.rawText) !==
-      currentManifest.datasets.secCompanyTickersExchange.upstreamSha256;
+    (remote.sec.verified &&
+      sha256(remote.sec.rawText) !==
+        currentManifest.datasets.secCompanyTickersExchange.upstreamSha256);
   const snapshotsChanged =
-    nextSbiCsv !== currentSbiCsv || remote.sec.rawText !== currentSecRaw;
+    nextSbiCsv !== currentSbiCsv ||
+    (remote.sec.verified && remote.sec.rawText !== currentSecRaw);
   const nextModuleSource = generatedModule(nextSbiCsv, nextSecJson);
   const currentModuleSource = await readFile(paths.generatedModule, "utf8").catch(() => "");
   const currentPublicSbi = await readFile(paths.publicSbi, "utf8").catch(() => "");
@@ -508,7 +586,14 @@ export async function runReferenceDataPipeline({
 
   if (!remoteMetadataChanged && !snapshotsChanged && !generatedAssetsChanged) {
     console.log("No reference-data changes detected");
-    return { changed: false, mode };
+    return {
+      changed: false,
+      mode,
+      secLastModified: reportedSecLastModified,
+      secSha256: currentManifest.datasets.secCompanyTickersExchange.sha256,
+      secStatus: remote.sec.verified ? "verified" : "stale",
+      staleSources: remote.sec.verified ? [] : ["secCompanyTickersExchange"],
+    };
   }
 
   const nextManifest = buildManifest({
@@ -520,6 +605,7 @@ export async function runReferenceDataPipeline({
     secJson: nextSecJson,
     secSnapshot: remote.sec.rawText,
     secLastModified: remote.sec.lastModified,
+    secVerified: remote.sec.verified,
   });
   assertManifest(nextManifest, {
     sbiCsv: nextSbiCsv,
@@ -540,7 +626,55 @@ export async function runReferenceDataPipeline({
     mode,
     sbiRecords: nextManifest.datasets.sbiUsdTtBuyCommunity.records,
     secRecords: nextManifest.datasets.secCompanyTickersExchange.records,
+    secLastModified: reportedSecLastModified,
+    secSha256: nextManifest.datasets.secCompanyTickersExchange.sha256,
+    secStatus: remote.sec.verified ? "verified" : "stale",
+    staleSources: remote.sec.verified ? [] : ["secCompanyTickersExchange"],
   };
+}
+
+export async function writeGitHubRefreshMetadata(
+  result,
+  {
+    outputPath = process.env.GITHUB_OUTPUT,
+    summaryPath = process.env.GITHUB_STEP_SUMMARY,
+  } = {},
+) {
+  if (!["verified", "stale"].includes(result?.secStatus)) {
+    throw new Error("SEC refresh status is invalid");
+  }
+  const secLastModified = normalizedHttpDate(result.secLastModified, "");
+  if (!secLastModified) {
+    throw new Error("SEC refresh last-verified date is invalid");
+  }
+  if (!/^[0-9a-f]{64}$/.test(result.secSha256)) {
+    throw new Error("SEC refresh SHA-256 is invalid");
+  }
+
+  if (outputPath) {
+    await appendFile(
+      outputPath,
+      [
+        `sec-status=${result.secStatus}`,
+        `sec-last-modified=${secLastModified}`,
+        `sec-sha256=${result.secSha256}`,
+        "",
+      ].join("\n"),
+    );
+  }
+  if (summaryPath) {
+    await appendFile(
+      summaryPath,
+      [
+        "### Reference source status",
+        "",
+        `- SEC status: **${result.secStatus}**`,
+        `- SEC last verified: \`${secLastModified}\``,
+        `- SEC snapshot SHA-256: \`${result.secSha256}\``,
+        "",
+      ].join("\n"),
+    );
+  }
 }
 
 function modeFromArgs(argv) {
@@ -554,8 +688,21 @@ function modeFromArgs(argv) {
 
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : "";
 if (invokedPath === fileURLToPath(import.meta.url)) {
-  await runReferenceDataPipeline({
-    mode: modeFromArgs(process.argv.slice(2)),
+  const args = process.argv.slice(2);
+  const mode = modeFromArgs(args);
+  const allowStaleSec = args.includes("--allow-stale-sec");
+  if (allowStaleSec && mode !== "refresh") {
+    throw new Error("--allow-stale-sec requires --refresh");
+  }
+  if (allowStaleSec && process.env.GITHUB_ACTIONS !== "true") {
+    throw new Error("--allow-stale-sec is restricted to GitHub Actions");
+  }
+  const result = await runReferenceDataPipeline({
+    mode,
     githubToken: process.env.GITHUB_TOKEN ?? "",
+    allowStaleSec,
   });
+  if (mode === "refresh") {
+    await writeGitHubRefreshMetadata(result);
+  }
 }

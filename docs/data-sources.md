@@ -115,6 +115,16 @@ The automation never merges its own pull request. A reviewer remains
 responsible for checking provenance and unexpected data changes before they
 reach the published app.
 
+SEC fair-access controls currently reject requests from GitHub-hosted runner
+networks. The scheduled run still attempts the official SEC URL every day, but
+on a fetch error it emits a workflow warning and retains the last verified SEC
+snapshot while allowing an SBI-only refresh to proceed. It never substitutes a
+proxy or third-party SEC mirror. The fallback is limited to retryable network
+and HTTP errors and a maximum snapshot age of 30 days; malformed responses,
+non-retryable errors, and older snapshots fail the run. Manual
+`npm run data:refresh` remains fail-closed, and the stale-SEC flag is restricted
+to GitHub Actions.
+
 ## Runtime Privacy
 
 Reference data is prebundled so the core workflow remains local:

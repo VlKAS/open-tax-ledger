@@ -139,6 +139,13 @@ never merges the pull request automatically. GitHub may disable scheduled
 workflows after 60 days without repository activity; the same workflow remains
 available through manual dispatch.
 
+The workflow always refreshes the community SBI archive and attempts the
+official SEC endpoint directly. SEC currently rate-limits GitHub-hosted runner
+networks; when that happens, the run emits a visible warning and retains the
+last verified SEC snapshot for up to 30 days so SBI updates are not blocked.
+The normal `npm run data:refresh` command remains fail-closed for local/manual
+refreshes.
+
 The command names are defined in [package.json](package.json).
 
 ## 🏦 Reference Data

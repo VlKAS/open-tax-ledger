@@ -9,6 +9,7 @@ import {
   normalizeSecJson,
   runReferenceDataPipeline,
   sha256,
+  writeGitHubRefreshMetadata,
 } from "../scripts/generate-reference-data.mjs";
 
 const oldCommit = "a".repeat(40);
@@ -77,6 +78,31 @@ async function makeFixtureRoot(t) {
   );
   await runReferenceDataPipeline({ root, mode: "build" });
   return root;
+}
+
+function failingSecFetch(status, statusText, body = "temporarily unavailable") {
+  return async (url) => {
+    if (url === "https://api.github.com/repos/sahilgupta/sbi-fx-ratekeeper") {
+      return response(JSON.stringify({ default_branch: "main" }));
+    }
+    if (url.endsWith("/commits/main")) {
+      return response(JSON.stringify({ sha: nextCommit }));
+    }
+    if (url.includes("raw.githubusercontent.com")) {
+      return response(
+        [
+          "DATE,TT BUY,SOURCE URL",
+          "2026-07-26,95.4,https://github.com/sahilgupta/sbi-fx-ratekeeper/blob/main/pdf_files/2026/7/2026-07-26.pdf",
+          "",
+        ].join("\n"),
+        { "content-type": "text/csv" },
+      );
+    }
+    if (url === "https://www.sec.gov/files/company_tickers_exchange.json") {
+      return new Response(body, { status, statusText });
+    }
+    throw new Error(`Unexpected test URL: ${url}`);
+  };
 }
 
 test("refresh writes each provider to the correct snapshot and is idempotent", async (t) => {
@@ -164,6 +190,230 @@ test("refresh writes each provider to the correct snapshot and is idempotent", a
     JSON.parse(await readFile(join(root, "reference-data", "manifest.json"), "utf8"))
       .generatedOn,
     "2026-07-27",
+  );
+});
+
+test("CI refresh keeps the last verified SEC snapshot after a retryable official fetch failure", async (t) => {
+  const root = await makeFixtureRoot(t);
+  const previousSecSnapshot = await readFile(
+    join(root, "reference-data", "sec-company-tickers-exchange.json"),
+    "utf8",
+  );
+  const previousSbiSnapshot = await readFile(
+    join(root, "reference-data", "sbi-usd-tt-buy-community.csv"),
+    "utf8",
+  );
+  const previousManifest = JSON.parse(
+    await readFile(join(root, "reference-data", "manifest.json"), "utf8"),
+  );
+  const nextSbiSource = [
+    "DATE,TT BUY,SOURCE URL",
+    "2026-07-26,95.4,https://github.com/sahilgupta/sbi-fx-ratekeeper/blob/main/pdf_files/2026/7/2026-07-26.pdf",
+    "2026-07-27,95.55,https://github.com/sahilgupta/sbi-fx-ratekeeper/blob/main/pdf_files/2026/7/2026-07-27.pdf",
+    "",
+  ].join("\n");
+  const fetchImpl = async (url) => {
+    if (url === "https://api.github.com/repos/sahilgupta/sbi-fx-ratekeeper") {
+      return response(JSON.stringify({ default_branch: "main" }));
+    }
+    if (url.endsWith("/commits/main")) {
+      return response(JSON.stringify({ sha: nextCommit }));
+    }
+    if (url.includes("raw.githubusercontent.com")) {
+      return response(nextSbiSource, { "content-type": "text/csv" });
+    }
+    if (url === "https://www.sec.gov/files/company_tickers_exchange.json") {
+      return new Response("temporarily unavailable", {
+        status: 403,
+        statusText: "Forbidden",
+      });
+    }
+    throw new Error(`Unexpected test URL: ${url}`);
+  };
+
+  await assert.rejects(
+    runReferenceDataPipeline({
+      root,
+      mode: "refresh",
+      fetchImpl,
+      secRetryDelaysMs: [],
+    }),
+    /Failed to fetch .*company_tickers_exchange\.json: 403 Forbidden/,
+  );
+  assert.equal(
+    await readFile(
+      join(root, "reference-data", "sec-company-tickers-exchange.json"),
+      "utf8",
+    ),
+    previousSecSnapshot,
+  );
+  assert.equal(
+    await readFile(
+      join(root, "reference-data", "sbi-usd-tt-buy-community.csv"),
+      "utf8",
+    ),
+    previousSbiSnapshot,
+  );
+  assert.deepEqual(
+    JSON.parse(
+      await readFile(join(root, "reference-data", "manifest.json"), "utf8"),
+    ),
+    previousManifest,
+  );
+
+  const refreshed = await runReferenceDataPipeline({
+    root,
+    mode: "refresh",
+    fetchImpl,
+    allowStaleSec: true,
+    now: new Date("2026-07-27T13:00:00Z"),
+    secRetryDelaysMs: [],
+  });
+  assert.equal(refreshed.changed, true);
+  assert.equal(refreshed.secStatus, "stale");
+  assert.deepEqual(refreshed.staleSources, ["secCompanyTickersExchange"]);
+
+  const nextSecSnapshot = await readFile(
+    join(root, "reference-data", "sec-company-tickers-exchange.json"),
+    "utf8",
+  );
+  const nextManifest = JSON.parse(
+    await readFile(join(root, "reference-data", "manifest.json"), "utf8"),
+  );
+  const nextSbiSnapshot = await readFile(
+    join(root, "reference-data", "sbi-usd-tt-buy-community.csv"),
+    "utf8",
+  );
+
+  assert.equal(nextSecSnapshot, previousSecSnapshot);
+  assert.deepEqual(
+    nextManifest.datasets.secCompanyTickersExchange,
+    previousManifest.datasets.secCompanyTickersExchange,
+  );
+  assert.match(nextSbiSnapshot, new RegExp(`/blob/${nextCommit}/`));
+  assert.equal(nextManifest.datasets.sbiUsdTtBuyCommunity.records, 2);
+  await runReferenceDataPipeline({ root, mode: "check" });
+});
+
+test("CI stale fallback accepts a Node fetch network failure", async (t) => {
+  const root = await makeFixtureRoot(t);
+  const successfulSources = failingSecFetch(200, "OK");
+  const fetchImpl = async (url, init) => {
+    if (url === "https://www.sec.gov/files/company_tickers_exchange.json") {
+      throw new TypeError("fetch failed");
+    }
+    return successfulSources(url, init);
+  };
+
+  const refreshed = await runReferenceDataPipeline({
+    root,
+    mode: "refresh",
+    fetchImpl,
+    allowStaleSec: true,
+    now: new Date("2026-07-27T13:00:00Z"),
+    secRetryDelaysMs: [],
+  });
+
+  assert.equal(refreshed.secStatus, "stale");
+  assert.deepEqual(refreshed.staleSources, ["secCompanyTickersExchange"]);
+});
+
+test("CI stale fallback rejects non-retryable SEC responses", async (t) => {
+  const root = await makeFixtureRoot(t);
+  const fetchImpl = failingSecFetch(404, "Not Found");
+
+  await assert.rejects(
+    runReferenceDataPipeline({
+      root,
+      mode: "refresh",
+      fetchImpl,
+      allowStaleSec: true,
+      secRetryDelaysMs: [],
+    }),
+    /Failed to fetch .*company_tickers_exchange\.json: 404 Not Found/,
+  );
+});
+
+test("CI stale fallback rejects malformed successful SEC responses", async (t) => {
+  const root = await makeFixtureRoot(t);
+  const fetchImpl = failingSecFetch(200, "OK", "{\"unexpected\":true}");
+
+  await assert.rejects(
+    runReferenceDataPipeline({
+      root,
+      mode: "refresh",
+      fetchImpl,
+      allowStaleSec: true,
+      secRetryDelaysMs: [],
+    }),
+    /SEC snapshot must contain fields and data arrays/,
+  );
+});
+
+test("CI stale fallback rejects SEC snapshots older than 30 days", async (t) => {
+  const root = await makeFixtureRoot(t);
+  const fetchImpl = failingSecFetch(403, "Forbidden");
+
+  await assert.rejects(
+    runReferenceDataPipeline({
+      root,
+      mode: "refresh",
+      fetchImpl,
+      allowStaleSec: true,
+      now: new Date("2026-08-26T00:00:01Z"),
+      secRetryDelaysMs: [],
+    }),
+    /SEC snapshot is older than 30 days/,
+  );
+});
+
+test("GitHub refresh metadata writes validated outputs and a visible summary", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-tax-ledger-metadata-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const outputPath = join(root, "github-output.txt");
+  const summaryPath = join(root, "github-summary.md");
+  const secSha256 = "c".repeat(64);
+
+  await writeGitHubRefreshMetadata(
+    {
+      secStatus: "stale",
+      secLastModified: "2026-07-24T13:32:36Z",
+      secSha256,
+    },
+    { outputPath, summaryPath },
+  );
+
+  assert.equal(
+    await readFile(outputPath, "utf8"),
+    [
+      "sec-status=stale",
+      "sec-last-modified=2026-07-24T13:32:36Z",
+      `sec-sha256=${secSha256}`,
+      "",
+    ].join("\n"),
+  );
+  assert.equal(
+    await readFile(summaryPath, "utf8"),
+    [
+      "### Reference source status",
+      "",
+      "- SEC status: **stale**",
+      "- SEC last verified: `2026-07-24T13:32:36Z`",
+      `- SEC snapshot SHA-256: \`${secSha256}\``,
+      "",
+    ].join("\n"),
+  );
+
+  await assert.rejects(
+    writeGitHubRefreshMetadata(
+      {
+        secStatus: "unexpected",
+        secLastModified: "not-a-date",
+        secSha256: "not-a-hash",
+      },
+      { outputPath, summaryPath },
+    ),
+    /SEC refresh status is invalid/,
   );
 });
 

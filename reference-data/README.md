@@ -24,6 +24,13 @@ The scheduled workflow runs that command daily and opens a pull request only
 when tracked reference data changes. It does not push changes directly to
 `main`, and it never auto-merges the result.
 
+The workflow uses `npm run data:refresh:ci`, which attempts both sources but
+can retain the last verified SEC snapshot when SEC rejects GitHub-hosted
+runner traffic. That condition is surfaced as a workflow warning and is
+limited to a snapshot no older than 30 days. It does not fall back to a proxy
+or community company-data mirror, and the SBI refresh can still produce a
+review pull request.
+
 When reviewing an automated or manual refresh:
 
 1. Confirm the community SBI commit and SEC endpoint in `manifest.json`.

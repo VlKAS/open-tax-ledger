@@ -18,6 +18,7 @@
   "scripts": {
     "data:build": "node scripts/generate-reference-data.mjs",
     "data:refresh": "node scripts/generate-reference-data.mjs --refresh",
+    "data:refresh:ci": "node scripts/generate-reference-data.mjs --refresh --allow-stale-sec",
     "data:check": "node scripts/generate-reference-data.mjs --check",
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",

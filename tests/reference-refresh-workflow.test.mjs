@@ -15,8 +15,16 @@ test("daily updater refreshes both sources and opens a review PR", async () => {
   assert.match(workflow, /^name: Refresh reference data$/m);
   assert.match(workflow, /^\s*schedule:\n\s*#.*\n\s*- cron: "37 3 \* \* \*"$/m);
   assert.match(workflow, /^\s*workflow_dispatch:$/m);
-  assert.match(workflow, /run: npm run data:refresh/);
+  assert.match(workflow, /id: refresh-data/);
+  assert.match(workflow, /run: npm run data:refresh:ci/);
   assert.match(workflow, /run: npm run check/);
+  assert.match(
+    workflow,
+    /SEC_STATUS: \$\{\{ steps\.refresh-data\.outputs\.sec-status \}\}/,
+  );
+  assert.match(workflow, /SEC-status: \$SEC_STATUS/);
+  assert.match(workflow, /SEC company metadata status: \*\*\$SEC_STATUS\*\*/);
+  assert.match(workflow, /never uses a proxy or mirror/);
   assert.match(workflow, /UPDATE_BRANCH: automation\/reference-data-refresh/);
   assert.match(workflow, /gh pr (?:create|edit)/);
   assert.match(workflow, /This automation never merges its own pull request/);
