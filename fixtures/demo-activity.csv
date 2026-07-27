@@ -1,0 +1,21 @@
+Statement,Header,Field Name,Field Value
+Statement,Data,Account,DU1234567
+Statement,Data,Base Currency,USD
+Statement,Data,Period,"2025-04-01 - 2026-03-31"
+Trades,Header,Asset Category,Currency,Symbol,Date/Time,Quantity,T. Price,Proceeds,Comm/Fee,Basis,Realized P/L
+Trades,Data,STK,USD,AAPL,2025-05-10 10:30:00,10,180,-1800,-1,1801,0
+Trades,Data,STK,USD,AAPL,2025-05-10 10:30:00,10,180,-1800,-1,1801,0
+Trades,Data,STK,USD,AAPL,2026-01-15 15:00:00,-5,210,1050,-1,-900,149
+Trades,Data,OPT,USD,AAPL  260117C00200000,2025-06-01 10:00:00,1,12,-1200,-1,1201,0
+Dividends,Header,Currency,Date,Description,Amount
+Dividends,Data,USD,2025-08-15,"AAPL CASH DIVIDEND",12.50
+Withholding Tax,Header,Currency,Date,Description,Amount
+Withholding Tax,Data,USD,2025-08-15,"AAPL US TAX WITHHELD",-3.75
+Interest,Header,Currency,Date,Description,Amount
+Interest,Data,USD,2025-09-30,"BROKER CREDIT INTEREST",1.25
+Open Positions,Header,Asset Category,Currency,Symbol,Quantity,Cost Basis,Close Price,Value,Unrealized P/L
+Open Positions,Data,STK,USD,AAPL,5,901,220,1100,199
+Deposits & Withdrawals,Header,Currency,Settle Date,Description,Amount
+Deposits & Withdrawals,Data,USD,2025-04-03,"ACH DEPOSIT",2500
+Corporate Actions,Header,Currency,Date,Description,Amount
+Corporate Actions,Data,USD,2025-11-01,"SAMPLE SPIN OFF",0

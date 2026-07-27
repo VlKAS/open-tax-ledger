@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Prepare reviewable Indian ITR working papers from Interactive Brokers Activity Statement CSVs. Local-only, transparent, and open source."
+    />
+    <meta name="theme-color" content="#f4efe4" />
+    <meta property="og:title" content="OpenTax Ledger" />
+    <meta
+      property="og:description"
+      content="IBKR statements to CA-reviewable Indian ITR working papers—locally in your browser."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="OpenTax Ledger" />
+    <meta
+      name="twitter:description"
+      content="Transparent, local-first preparation for foreign portfolio tax review."
+    />
+    <meta name="twitter:image" content="/og.png" />
+    <title>OpenTax Ledger — IBKR to Indian ITR working papers</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/app.mjs"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="OpenTax Ledger home">
+        <span class="brand-mark" aria-hidden="true">OL</span>
+        <span>
+          <strong>OpenTax Ledger</strong>
+          <small>Foreign portfolio tax prep</small>
+        </span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="#workspace">Workspace</a>
+        <a href="#calculation-model">Calculation model</a>
+        <a href="#open-source">Open source</a>
+      </nav>
+      <a class="header-action" href="#workspace">Start locally</a>
+    </header>
+
+    <main id="main-content">
+      <section class="hero" id="top">
+        <div class="hero-copy">
+          <div class="eyebrow">
+            <span class="live-dot" aria-hidden="true"></span>
+            AY 2026–27 · India · IBKR Activity Statements
+          </div>
+          <h1>Your foreign portfolio, translated into a reviewable tax ledger.</h1>
+          <p class="hero-lede">
+            Prepare draft Capital Gains, FA, FSI, and TR working papers from
+            Interactive Brokers CSVs—with visible assumptions and an audit trail
+            your CA can follow.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#workspace">Start in this browser</a>
+            <a class="button button-quiet" href="#calculation-model">
+              See the calculation model
+            </a>
+          </div>
+          <ul class="hero-proof" aria-label="Privacy and product guarantees">
+            <li><span aria-hidden="true">✓</span> No sign-up</li>
+            <li><span aria-hidden="true">✓</span> No broker credentials</li>
+            <li><span aria-hidden="true">✓</span> No statement uploads</li>
+          </ul>
+        </div>
+
+        <div class="hero-ledger" aria-label="Synthetic schedule preview">
+          <div class="ledger-toolbar">
+            <div>
+              <span class="document-kicker">Review packet</span>
+              <strong>AY 2026–27</strong>
+            </div>
+            <span class="stamp stamp-ready">Synthetic demo</span>
+          </div>
+          <div class="ledger-tabs" aria-hidden="true">
+            <span class="active">Overview</span>
+            <span>CG</span>
+            <span>FSI / TR</span>
+            <span>FA</span>
+          </div>
+          <div class="preview-metrics">
+            <div>
+              <small>Disposals</small>
+              <strong>12</strong>
+              <span>2 need review</span>
+            </div>
+            <div>
+              <small>Foreign income</small>
+              <strong>₹42,830</strong>
+              <span>Illustrative</span>
+            </div>
+          </div>
+          <div class="ledger-sheet" aria-hidden="true">
+            <div class="sheet-row sheet-head">
+              <span>Source</span><span>Rule</span><span>Status</span>
+            </div>
+            <div class="sheet-row">
+              <span>Trades · 14</span><span>Lot review</span><span class="status-ready">Ready</span>
+            </div>
+            <div class="sheet-row">
+              <span>Dividends · 6</span><span>Rule 115</span><span class="status-warn">Rate needed</span>
+            </div>
+            <div class="sheet-row">
+              <span>Positions · 4</span><span>Calendar year</span><span class="status-review">Review</span>
+            </div>
+          </div>
+          <div class="privacy-seal">
+            <span class="seal-icon" aria-hidden="true">0</span>
+            <div>
+              <strong>Network requests for your files</strong>
+              <span>Everything runs in browser memory</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="principles" aria-label="Product principles">
+        <div>
+          <span class="principle-number">01</span>
+          <strong>Local by design</strong>
+          <p>Your statements never leave this browser.</p>
+        </div>
+        <div>
+          <span class="principle-number">02</span>
+          <strong>Evidence before totals</strong>
+          <p>Every draft row stays tied to its source section.</p>
+        </div>
+        <div>
+          <span class="principle-number">03</span>
+          <strong>Honest boundaries</strong>
+          <p>Unsupported cases are flagged, never silently guessed.</p>
+        </div>
+      </section>
+
+      <section class="workspace-section" id="workspace">
+        <div class="section-heading">
+          <div>
+            <span class="section-index">Working preview · v0.1</span>
+            <h2>Build a CA-review packet in four steps.</h2>
+          </div>
+          <p>
+            Start with synthetic data, or use your own IBKR Activity Statement
+            CSVs. Files are parsed locally and discarded when the page closes.
+          </p>
+        </div>
+
+        <div class="workspace-shell">
+          <aside class="step-rail" aria-label="Preparation steps">
+            <div class="rail-label">Preparation flow</div>
+            <ol>
+              <li>
+                <button class="step-button is-active" type="button" data-step-target="import">
+                  <span>1</span>
+                  <span><strong>Import</strong><small>Read statements</small></span>
+                </button>
+              </li>
+              <li>
+                <button class="step-button" type="button" data-step-target="configure">
+                  <span>2</span>
+                  <span><strong>Configure</strong><small>Set assumptions</small></span>
+                </button>
+              </li>
+              <li>
+                <button class="step-button" type="button" data-step-target="review">
+                  <span>3</span>
+                  <span><strong>Review</strong><small>Resolve checks</small></span>
+                </button>
+              </li>
+              <li>
+                <button class="step-button" type="button" data-step-target="export">
+                  <span>4</span>
+                  <span><strong>Export</strong><small>Handoff to CA</small></span>
+                </button>
+              </li>
+            </ol>
+            <button class="clear-button" type="button" data-action="clear">
+              Clear browser session
+            </button>
+          </aside>
+
+          <div class="workspace-main">
+            <section class="step-panel is-active" data-step-panel="import" aria-labelledby="import-title">
+              <div class="panel-heading">
+                <div>
+                  <span class="panel-kicker">Step 1 of 4</span>
+                  <h3 id="import-title">Import Activity Statements</h3>
+                </div>
+                <span class="local-badge">Local-only</span>
+              </div>
+              <p class="panel-intro">
+                Export CSV statements from IBKR for the financial year and the
+                relevant calendar year. Overlapping statement rows are de-duplicated.
+              </p>
+
+              <label class="drop-zone" for="statement-files" data-drop-zone>
+                <input
+                  id="statement-files"
+                  type="file"
+                  accept=".csv,text/csv"
+                  multiple
+                  data-file-input
+                />
+                <span class="drop-icon" aria-hidden="true">CSV</span>
+                <strong>Drop IBKR statement CSVs here</strong>
+                <span>or choose files from this device · multiple files supported</span>
+                <span class="drop-privacy">Nothing is sent to a server</span>
+              </label>
+
+              <div class="import-actions">
+                <button class="button button-primary" type="button" data-action="process" disabled>
+                  Parse selected files
+                </button>
+                <button class="button button-secondary" type="button" data-action="demo">
+                  Use synthetic demo
+                </button>
+              </div>
+
+              <div class="file-list" data-file-list hidden></div>
+              <div class="inline-status" aria-live="polite" data-import-status>
+                Choose CSVs or load the synthetic demo to begin.
+              </div>
+
+              <details class="helper-disclosure">
+                <summary>How to export the right IBKR statement</summary>
+                <ol>
+                  <li>In Client Portal, open Performance &amp; Reports → Statements.</li>
+                  <li>Run an Activity Statement with trades, dividends, withholding, positions, and transfers.</li>
+                  <li>Choose CSV and include both FY and calendar-year coverage when available.</li>
+                </ol>
+              </details>
+            </section>
+
+            <section class="step-panel" data-step-panel="configure" aria-labelledby="configure-title" hidden>
+              <div class="panel-heading">
+                <div>
+                  <span class="panel-kicker">Step 2 of 4</span>
+                  <h3 id="configure-title">Confirm filing assumptions</h3>
+                </div>
+                <span class="stamp stamp-review">Needs confirmation</span>
+              </div>
+              <p class="panel-intro">
+                These choices control which working papers are relevant. OpenTax
+                Ledger does not collect your PAN, Aadhaar, name, or broker password.
+              </p>
+
+              <div class="form-grid">
+                <label>
+                  <span>Assessment year</span>
+                  <select data-config="assessmentYear">
+                    <option value="2026-27" selected>2026–27</option>
+                    <option value="2025-26">2025–26</option>
+                    <option value="2024-25">2024–25</option>
+                  </select>
+                  <small>FY 2025–26 for AY 2026–27</small>
+                </label>
+                <label>
+                  <span>Residential status</span>
+                  <select data-config="residentialStatus">
+                    <option value="ROR" selected>Resident and ordinarily resident</option>
+                    <option value="RNOR">Resident but not ordinarily resident</option>
+                    <option value="NR">Non-resident</option>
+                  </select>
+                  <small>FA / FSI treatment depends on this</small>
+                </label>
+                <label>
+                  <span>Likely return form</span>
+                  <select data-config="returnForm">
+                    <option value="ITR-2" selected>ITR-2 · no business income</option>
+                    <option value="ITR-3">ITR-3 · business/professional income</option>
+                    <option value="Review">Not sure · flag for CA</option>
+                  </select>
+                  <small>This is a working assumption, not form selection advice</small>
+                </label>
+                <label>
+                  <span>Broker base currency</span>
+                  <select data-config="baseCurrency">
+                    <option value="USD" selected>USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                    <option value="Other">Other / mixed</option>
+                  </select>
+                  <small>IBKR conversions are not treated as Rule 115 evidence</small>
+                </label>
+              </div>
+
+              <fieldset class="choice-group">
+                <legend>Exchange-rate evidence</legend>
+                <label>
+                  <input type="radio" name="fx-source" value="missing" checked />
+                  <span>
+                    <strong>Mark rates as missing</strong>
+                    <small>Safest default. Exported rows remain draft until rates are supplied.</small>
+                  </span>
+                </label>
+                <label>
+                  <input type="radio" name="fx-source" value="illustrative" />
+                  <span>
+                    <strong>Use illustrative demo rates</strong>
+                    <small>Available only for the synthetic sample; never filing-ready.</small>
+                  </span>
+                </label>
+              </fieldset>
+
+              <div class="callout callout-warning">
+                <strong>Deliberate limitation</strong>
+                <p>
+                  v0.1 does not bundle SBI TT buying-rate data. Each taxable event
+                  remains flagged until an authoritative rate pipeline is added.
+                </p>
+              </div>
+
+              <div class="panel-actions">
+                <button class="button button-quiet" type="button" data-go-step="import">Back</button>
+                <button class="button button-primary" type="button" data-go-step="review">
+                  Review draft schedules
+                </button>
+              </div>
+            </section>
+
+            <section class="step-panel" data-step-panel="review" aria-labelledby="review-title" hidden>
+              <div class="panel-heading">
+                <div>
+                  <span class="panel-kicker">Step 3 of 4</span>
+                  <h3 id="review-title">Review the evidence, not just the total</h3>
+                </div>
+                <span class="stamp stamp-review" data-review-stamp>Draft</span>
+              </div>
+              <p class="panel-intro">
+                Values from IBKR are source references. Indian classification, lot
+                treatment, Rule 115 conversion, and FTC eligibility still require review.
+              </p>
+
+              <div class="metric-strip" aria-label="Imported statement summary">
+                <div><small>Trades</small><strong data-metric="trades">0</strong></div>
+                <div><small>Positions</small><strong data-metric="positions">0</strong></div>
+                <div><small>Dividends</small><strong data-metric="dividends">0</strong></div>
+                <div><small>Checks</small><strong data-metric="checks">0</strong></div>
+              </div>
+
+              <div class="review-tabs" role="tablist" aria-label="Draft schedules">
+                <button role="tab" aria-selected="true" data-review-tab="overview">Overview</button>
+                <button role="tab" aria-selected="false" data-review-tab="capitalGains">Capital gains</button>
+                <button role="tab" aria-selected="false" data-review-tab="fsi">FSI / TR</button>
+                <button role="tab" aria-selected="false" data-review-tab="fa">Schedule FA</button>
+              </div>
+              <div class="review-content" data-review-content>
+                <div class="empty-review">
+                  Load a statement or the synthetic demo to preview review tables.
+                </div>
+              </div>
+
+              <div class="validation-section">
+                <div class="subsection-heading">
+                  <div>
+                    <span class="panel-kicker">Validation register</span>
+                    <h4>What still needs a human decision</h4>
+                  </div>
+                  <span class="issue-count" data-issue-count>0 checks</span>
+                </div>
+                <div class="validation-list" data-validation-list>
+                  <p class="muted">No review model loaded.</p>
+                </div>
+              </div>
+
+              <div class="panel-actions">
+                <button class="button button-quiet" type="button" data-go-step="configure">Back</button>
+                <button class="button button-primary" type="button" data-go-step="export">
+                  Prepare handoff
+                </button>
+              </div>
+            </section>
+
+            <section class="step-panel" data-step-panel="export" aria-labelledby="export-title" hidden>
+              <div class="panel-heading">
+                <div>
+                  <span class="panel-kicker">Step 4 of 4</span>
+                  <h3 id="export-title">Package the working papers</h3>
+                </div>
+                <span class="stamp stamp-ready">Local download</span>
+              </div>
+              <p class="panel-intro">
+                The review pack is a handoff artifact—not an ITR submission and not
+                proof that a return has been filed.
+              </p>
+
+              <div class="export-grid">
+                <article class="export-card export-card-primary">
+                  <span class="export-format">HTML</span>
+                  <h4>CA review report</h4>
+                  <p>
+                    A print-ready offline report with assumptions, schedule previews,
+                    validation findings, and source counts.
+                  </p>
+                  <button class="button button-primary" type="button" data-export="report">
+                    Download review report
+                  </button>
+                </article>
+                <article class="export-card">
+                  <span class="export-format">JSON</span>
+                  <h4>Audit data</h4>
+                  <p>
+                    Machine-readable normalized draft data for reproducibility and
+                    community testing.
+                  </p>
+                  <button class="button button-secondary" type="button" data-export="json">
+                    Download JSON
+                  </button>
+                </article>
+                <article class="export-card">
+                  <span class="export-format">CSV</span>
+                  <h4>Schedule tables</h4>
+                  <p>
+                    A combined Capital Gains, FSI, TR, and FA working table that opens
+                    in spreadsheet software.
+                  </p>
+                  <button class="button button-secondary" type="button" data-export="csv">
+                    Download schedule CSV
+                  </button>
+                </article>
+              </div>
+
+              <div class="handoff-checklist">
+                <h4>Before filing</h4>
+                <label><input type="checkbox" /> Confirm residential status and return form.</label>
+                <label><input type="checkbox" /> Supply and retain authoritative TT buying rates.</label>
+                <label><input type="checkbox" /> Resolve transfers, corporate actions, and unsupported assets.</label>
+                <label><input type="checkbox" /> Reconcile foreign tax evidence and Form 67 timing.</label>
+                <label><input type="checkbox" /> Have a qualified CA review the final figures.</label>
+              </div>
+
+              <div class="panel-actions">
+                <button class="button button-quiet" type="button" data-go-step="review">Back</button>
+                <button class="button button-secondary" type="button" data-action="clear">
+                  Clear browser session
+                </button>
+              </div>
+            </section>
+          </div>
+
+          <aside class="audit-rail" aria-label="Session audit status">
+            <div class="audit-title">
+              <span>Session audit</span>
+              <span class="audit-pulse" aria-hidden="true"></span>
+            </div>
+            <dl>
+              <div><dt>Processing</dt><dd>Browser memory</dd></div>
+              <div><dt>Files selected</dt><dd data-audit="files">0</dd></div>
+              <div><dt>Rows parsed</dt><dd data-audit="rows">0</dd></div>
+              <div><dt>Identifiers requested</dt><dd>None</dd></div>
+              <div><dt>Telemetry</dt><dd>Off</dd></div>
+            </dl>
+            <div class="audit-rule">
+              <span>Rule pack</span>
+              <strong>AY 2026–27 · draft</strong>
+              <small>Updated 27 Jul 2026</small>
+            </div>
+            <div class="audit-warning">
+              <span aria-hidden="true">!</span>
+              <p><strong>Not tax advice.</strong> Verify every figure with a qualified professional.</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="model-section" id="calculation-model">
+        <div class="section-heading compact">
+          <div>
+            <span class="section-index">Transparent by default</span>
+            <h2>A calculation model you can challenge.</h2>
+          </div>
+          <p>
+            The product separates broker facts, tax assumptions, and unresolved
+            judgments so a reviewer can see where each number came from.
+          </p>
+        </div>
+
+        <div class="model-flow" aria-label="Data processing model">
+          <article>
+            <span>Input</span>
+            <h3>Broker evidence</h3>
+            <p>Activity Statement CSVs: trades, positions, dividends, withholding, interest, transfers.</p>
+            <small>Original values retained in browser memory</small>
+          </article>
+          <span class="flow-arrow" aria-hidden="true">→</span>
+          <article>
+            <span>Normalize</span>
+            <h3>Auditable ledger</h3>
+            <p>Known IBKR sections are mapped into typed records with source file and row references.</p>
+            <small>Duplicates removed · unsupported rows flagged</small>
+          </article>
+          <span class="flow-arrow" aria-hidden="true">→</span>
+          <article>
+            <span>Review</span>
+            <h3>Draft schedules</h3>
+            <p>CG, FSI, TR, and FA working tables are assembled without hiding missing evidence.</p>
+            <small>CA review required before filing</small>
+          </article>
+        </div>
+
+        <div class="boundary-grid">
+          <article>
+            <span class="boundary-label supported">Included in v0.1</span>
+            <h3>Conservative first scope</h3>
+            <ul>
+              <li>IBKR Activity Statement CSV section parsing</li>
+              <li>Foreign-listed equity and ETF source rows</li>
+              <li>Dividends, withholding, interest, and open positions</li>
+              <li>Draft CG / FSI / TR / FA review tables</li>
+              <li>Validation findings and source audit counts</li>
+            </ul>
+          </article>
+          <article>
+            <span class="boundary-label excluded">Flagged, not guessed</span>
+            <h3>Outside the current engine</h3>
+            <ul>
+              <li>Direct ITR or Form 67 submission</li>
+              <li>Options, futures, shorts, bonds, forex, or business-income classification</li>
+              <li>Corporate actions and transferred-in lots with missing basis</li>
+              <li>Authoritative SBI TTBR data redistribution</li>
+              <li>Final tax liability or professional advice</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="opensource-section" id="open-source">
+        <div class="source-copy">
+          <span class="section-index">AGPL-3.0 open source</span>
+          <h2>Tax software deserves public scrutiny.</h2>
+          <p>
+            Parsing logic, rule assumptions, synthetic fixtures, and validation
+            tests live together. Contributions should improve traceability before
+            they add automation.
+          </p>
+          <div class="source-actions">
+            <a class="button button-inverse" href="#source-code" id="github-link">
+              GitHub repository
+            </a>
+            <a class="text-link" href="#calculation-model">Read supported scope →</a>
+          </div>
+        </div>
+        <div class="source-terminal" id="source-code" aria-label="Open source project structure">
+          <div class="terminal-bar">
+            <span></span><span></span><span></span>
+            <strong>open-tax-ledger</strong>
+          </div>
+          <pre><code>lib/
+  ibkr-parser.mjs
+  review-model.mjs
+fixtures/
+  demo-activity.csv     # synthetic
+docs/
+  methodology.md
+  privacy-model.md
+tests/
+  parser.test.mjs
+
+License: AGPL-3.0-only
+Network calls: none</code></pre>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div>
+        <a class="brand footer-brand" href="#top">
+          <span class="brand-mark" aria-hidden="true">OL</span>
+          <span><strong>OpenTax Ledger</strong><small>Built for verifiable handoffs</small></span>
+        </a>
+        <p>
+          Independent open-source software. Not affiliated with or endorsed by
+          Interactive Brokers. “IBKR” and related marks belong to their owners.
+        </p>
+      </div>
+      <div class="footer-note">
+        <strong>Important</strong>
+        <p>
+          This tool prepares draft working papers only. It does not file an ITR,
+          determine your final tax, or replace a Chartered Accountant.
+        </p>
+      </div>
+      <nav aria-label="Footer links">
+        <a href="#workspace">Workspace</a>
+        <a href="#calculation-model">Methodology</a>
+        <a href="#open-source">Source</a>
+      </nav>
+    </footer>
+
+    <dialog class="clear-dialog" data-clear-dialog>
+      <form method="dialog">
+        <span class="dialog-kicker">Local session</span>
+        <h2>Clear imported data?</h2>
+        <p>
+          This removes selected files and parsed records from this browser tab.
+          It does not affect the original files on your device.
+        </p>
+        <div class="dialog-actions">
+          <button class="button button-quiet" value="cancel">Keep session</button>
+          <button class="button button-danger" value="clear">Clear local data</button>
+        </div>
+      </form>
+    </dialog>
+    <div class="toast" role="status" aria-live="polite" data-toast hidden></div>
+  </body>
+</html>
