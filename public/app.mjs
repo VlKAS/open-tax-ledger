@@ -1507,7 +1507,7 @@ function renderReviewTab() {
       { label: "Company", value: (row) => row.company?.name || "Unmatched" },
       { label: "Exchange", value: (row) => row.company?.exchange || "—" },
       { key: "currency", label: "CCY" },
-      { key: "quantity", label: "Quantity", format: "number" },
+      { key: "closingQuantity", label: "Closing qty", format: "number" },
       { key: "acquisitionDate", label: "Acq date" },
       { key: "acquisitionStatus", label: "Acq status" },
       { key: "initialValue", label: "Initial value", format: "number" },

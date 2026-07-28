@@ -175,3 +175,27 @@ test("derives dividend and proceeds evidence per entity", () => {
   assert.equal(result.entities[0].grossProceeds, 150);
   assert.equal(result.entities[0].evidence.dividendRows, 1);
 });
+
+test("matches Schedule FA dividends by normalized symbol when descriptions contain ISINs", () => {
+  const result = deriveScheduleFa({
+    assessmentYear: "2026-27",
+    trades: [trade({ symbol: "AAPL", date: "2025-01-15", quantity: 2, basis: 200 })],
+    dividends: [
+      {
+        symbol: "AAPL",
+        date: "2025-08-01",
+        description: "Apple Inc. (US0378331005) CASH DIVIDEND",
+        amount: 12.34,
+      },
+      {
+        symbol: "MSFT",
+        date: "2025-08-01",
+        description: "Microsoft Corp. (US5949181045) CASH DIVIDEND",
+        amount: 99,
+      },
+    ],
+  });
+
+  assert.equal(result.entities[0].grossDividends, 12.34);
+  assert.equal(result.entities[0].evidence.dividendRows, 1);
+});

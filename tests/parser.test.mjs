@@ -302,6 +302,55 @@ test("review schedules are scoped to the financial year while FIFO retains earli
   assert.equal(review.summary.withholding, 1);
 });
 
+test("blank asset-category trade exports still feed FIFO and Schedule FA", () => {
+  const csv = [
+    "Statement,Header,Field Name,Field Value",
+    "Statement,Data,Period,\"2025-04-01 - 2026-03-31\"",
+    "Trades,Header,Currency,Symbol,Date/Time,Quantity,T. Price,Proceeds,Comm/Fee,Basis,Realized P/L",
+    "Trades,Data,USD,ALFA,2025-04-01 09:30:00,1,100,-100,0,100,0",
+    "Trades,Data,USD,ALFA,2025-05-01 09:30:00,-1,120,120,0,-100,20",
+    "Open Positions,Header,Currency,Symbol,Quantity,Cost Basis,Close Price,Value,Unrealized P/L",
+    "Open Positions,Data,USD,BETA,2,200,110,220,20",
+  ].join("\n");
+
+  const review = buildReviewModel(parseIbkrStatements(csv), {
+    assessmentYear: "2026-27",
+  });
+
+  assert.equal(review.summary.capitalGainRows, 1);
+  assert.equal(review.schedules.capitalGains[0].symbol, "ALFA");
+  assert.equal(review.schedules.capitalGains[0].gain, 20);
+  assert.equal(review.summary.faEntities, 2);
+  assert.equal(review.summary.positions, 1);
+  assert.deepEqual(
+    review.validations.map(({ code }) => code).filter((code) => code === "UNSUPPORTED_TRADE"),
+    [],
+  );
+});
+
+test("open-position market-value aliases feed holdings and Schedule FA", () => {
+  const csv = [
+    "Statement,Header,Field Name,Field Value",
+    "Statement,Data,Period,\"2025-04-01 - 2025-12-31\"",
+    "Open Positions,Header,Asset Category,Currency,Symbol,Quantity,Cost Basis,Close Price,Market Value,Unrealized P/L",
+    "Open Positions,Data,STK,USD,ALFA,2,200,110,220,20",
+  ].join("\n");
+
+  const review = buildReviewModel(parseIbkrStatements(csv), {
+    assessmentYear: "2026-27",
+  });
+
+  assert.equal(review.summary.rawPositions, 1);
+  assert.equal(review.summary.positions, 1);
+  assert.equal(review.summary.faEntities, 1);
+  assert.equal(review.schedules.holdings[0].value, 220);
+  assert.equal(review.schedules.fa[0].closingValue, 220);
+  assert.deepEqual(
+    review.validations.map(({ code }) => code).filter((code) => code === "MISSING_NUMERIC_VALUE"),
+    [],
+  );
+});
+
 test("malformed numeric fields fail closed instead of becoming zero-valued tax rows", () => {
   const csv = [
     "Statement,Header,Field Name,Field Value",

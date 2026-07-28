@@ -87,6 +87,7 @@ test("static client assets are safe under a GitHub Pages project subpath", async
   assert.match(app, /conversionCandidateObservations/);
   assert.match(app, /Country-wise FTC preview/);
   assert.match(app, /Latest Holdings/);
+  assert.match(app, /Closing qty/);
   assert.match(app, /faConversionSummary/);
   assert.match(app, /matched rows/);
   assert.match(app, /distinct statutory dates/);
