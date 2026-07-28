@@ -9,7 +9,9 @@ is available today.
 - Draft working papers for Schedule CG, Schedule FA, Schedule FSI, Schedule TR,
   and checks.
 - Scope limited to supported equity and ETF flows.
-- Exact-date USD TT BUY community-reference lookup and downloadable CSV.
+- Automatic Rule 115 and Rule 128 date derivation for supported USD income and
+  foreign-tax rows, with exact-date INR previews and no prior-day fallback.
+- A mandatory review dashboard before local downloads.
 - Offline SEC company metadata enrichment with source provenance.
 - GitHub Pages deployment workflow.
 - Synthetic fixtures only.
@@ -28,7 +30,8 @@ is available today.
 - XLSX export for CA-facing review packs.
 - Assessment-year specific schedule templates.
 - Expanded corporate-action handling after test fixtures exist.
-- More explicit prescribed-date guidance and rate-evidence audit output.
+- Broader assessment-year fixtures for specified-date and rate-evidence audit
+  output.
 - Better import diagnostics for unsupported IBKR sections.
 
 ## Later

@@ -34,6 +34,11 @@ test("server renders the complete privacy-first product", async () => {
   assert.match(html, /Configure/);
   assert.match(html, /Review/);
   assert.match(html, /Export/);
+  assert.match(html, /Automatic Rule 115 date summary/);
+  assert.match(html, /no\s+prior-business-day shift is applied/i);
+  assert.match(html, /data-action="confirm-review"/);
+  assert.match(html, /I reviewed this preview · continue to downloads/);
+  assert.doesNotMatch(html, /data-rate-lookup-date|data-action="lookup-rate"/);
   assert.match(html, /Not tax advice/i);
   assert.match(html, /SBI FX RateKeeper community archive/i);
   assert.match(html, /SEC EDGAR ticker associations/i);
@@ -44,6 +49,14 @@ test("server renders the complete privacy-first product", async () => {
 test("static client assets are safe under a GitHub Pages project subpath", async () => {
   const html = await readFile(new URL("../dist/client/index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../dist/client/app.mjs", import.meta.url), "utf8");
+  const referenceData = await readFile(
+    new URL("../dist/client/lib/reference-data.js", import.meta.url),
+    "utf8",
+  );
+  const rule115 = await readFile(
+    new URL("../dist/client/lib/rule115.js", import.meta.url),
+    "utf8",
+  );
   const rates = await readFile(
     new URL("../dist/client/data/sbi-usd-tt-buy-community.csv", import.meta.url),
     "utf8",
@@ -56,6 +69,14 @@ test("static client assets are safe under a GitHub Pages project subpath", async
   assert.match(app, /from "\.\/lib\/ibkr\.js"/);
   assert.match(app, /from "\.\/lib\/reference-data\.generated\.js"/);
   assert.doesNotMatch(app, /from "\/lib\//);
+  assert.match(app, /step === "export" && !state\.reviewConfirmed/);
+  assert.match(app, /Review the converted schedules before downloading\./);
+  assert.match(app, /discardParsedReviewForFileChange/);
+  assert.match(app, /MAX_PREVIEW_ROWS = 200/);
+  assert.match(app, /conversionCandidateObservations/);
+  assert.match(referenceData, /exactDateOnly:\s*true/);
+  assert.match(rule115, /lastDayOfPreviousMonth/);
+  assert.match(rule115, /indianFinancialYearEnd/);
   assert.match(rates, /^DATE,TT BUY,SOURCE URL/m);
 });
 

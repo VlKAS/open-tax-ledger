@@ -977,7 +977,7 @@ summary:focus-visible {
 }
 
 .reference-card h5,
-.rate-lookup h5 {
+.conversion-date-summary h5 {
   font-family: var(--font-display);
   font-size: 20px;
   font-weight: 500;
@@ -986,7 +986,7 @@ summary:focus-visible {
 
 .reference-card p,
 .reference-card small,
-.rate-lookup p {
+.conversion-date-summary p {
   color: var(--ink-soft);
   font-size: 9px;
   margin: 0;
@@ -1037,43 +1037,20 @@ summary:focus-visible {
   max-width: 100%;
 }
 
-.rate-lookup {
+.conversion-date-summary {
   align-items: end;
   border: 1px solid var(--line);
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(0, 1fr) minmax(250px, 0.65fr);
+  grid-template-columns: minmax(0, 0.45fr) minmax(360px, 1fr);
   margin-top: 18px;
   padding: 16px;
 }
 
-.rate-lookup-controls {
-  align-items: end;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: 1fr auto;
-}
-
-.rate-lookup-controls label {
-  display: flex;
-  flex-direction: column;
-  font-size: 9px;
-  font-weight: 700;
-  gap: 5px;
-}
-
-.rate-lookup-controls input {
-  background: var(--paper-light);
-  border: 1px solid var(--line-dark);
-  color: var(--ink);
-  min-height: 40px;
-  padding: 8px 10px;
-}
-
 .rate-result {
   background: var(--teal-light);
-  grid-column: 1 / -1;
   min-height: 44px;
+  overflow-x: auto;
   padding: 11px 13px;
 }
 
@@ -1089,6 +1066,27 @@ summary:focus-visible {
   font-size: 9px;
   margin: 8px 0 0;
   padding-left: 18px;
+}
+
+.conversion-mini-grid {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(4, minmax(110px, 1fr));
+  margin-bottom: 10px;
+}
+
+.conversion-mini-grid span {
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--ink-soft);
+  font-size: 9px;
+  padding: 9px;
+}
+
+.conversion-mini-grid strong {
+  color: var(--ink);
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 15px;
 }
 
 .table-scroll {
@@ -1251,6 +1249,10 @@ summary:focus-visible {
   min-height: 220px;
   overflow-x: auto;
   padding: 16px 0;
+}
+
+.review-content .data-table {
+  min-width: 1100px;
 }
 
 .empty-review {
@@ -2105,8 +2107,7 @@ summary:focus-visible {
   }
 
   .reference-actions,
-  .rate-lookup,
-  .rate-lookup-controls {
+  .conversion-date-summary {
     align-items: stretch;
     grid-template-columns: 1fr;
   }
@@ -2119,8 +2120,8 @@ summary:focus-visible {
     width: 100%;
   }
 
-  .rate-result {
-    grid-column: 1;
+  .conversion-mini-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .reference-table-note {

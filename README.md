@@ -34,7 +34,10 @@ Aadhaar, connect to the Income Tax Department portal, or file a return.
   working papers.
 - 🔎 Shows reconciliation checks for missing FX, unsupported instruments,
   transfers, duplicate rows, and review items.
-- 🏦 Bundles a pinned community USD TT BUY reference table for exact-date lookup.
+- 🗓️ Derives supported Rule 115 and Rule 128 calendar dates automatically.
+- 🏦 Uses a pinned community USD TT BUY table for exact-date INR previews without
+  silently shifting weekends or holidays.
+- 👀 Requires a schedule-and-audit preview before local downloads.
 - 🏢 Enriches supported tickers with offline SEC EDGAR company, CIK, ticker, and
   exchange metadata.
 - 🔒 Processes taxpayer CSV files locally in the browser.
@@ -59,8 +62,6 @@ Not supported yet:
 - Futures, options, crypto, bonds, mutual funds, margin interest, complex
   corporate actions, or multi-broker consolidation.
 - XLSX exports.
-- Automatic Rule 115 date selection or automatic INR conversion from the bundled
-  USD TT BUY table.
 - Live prices or a complete global security master.
 
 ## 🧭 How To Use
@@ -69,11 +70,12 @@ Not supported yet:
 2. Open the [live app](https://vlkas.github.io/open-tax-ledger/) or run it
    locally.
 3. Import the CSV in the browser.
-4. Review parsed trades, dividends, taxes withheld, transfers, positions,
-   offline company matches, and FX assumptions.
-5. Determine the prescribed Rule 115 date with a qualified reviewer.
-6. Use the exact-date USD TT BUY lookup and retain primary evidence for material
-   dates. The app does not apply a prior-day fallback.
+4. Confirm filing assumptions. The app derives supported Rule 115 specified
+   dates and Rule 128 foreign-tax dates automatically.
+5. Review the INR preview, per-row date rule, exact TT BUY match, and unresolved
+   checks before downloads are enabled.
+6. Retain primary SBI evidence for material dates. The app does not apply a
+   prior-business-day fallback when the exact date is unavailable.
 7. Export draft schedules and reconciliation checks.
 8. Share the exported working papers with a CA.
 9. Enter final CA-approved values in the official Income Tax Department utility
@@ -165,6 +167,7 @@ Official context:
 
 - [Income Tax Rule 115](https://www.incometaxindia.gov.in/w/rule-115-2)
 - [Income Tax Rule 26 TT buying-rate definition](https://www.incometaxindia.gov.in/w/rule-26-8)
+- [Income Tax Rule 128 foreign tax credit](https://www.incometaxindia.gov.in/w/rule-128-1)
 - [SBI current Forex Card Rates PDF](https://sbi.bank.in/documents/16012/1400784/FOREX_CARD_RATES.pdf)
 
 Important caveats:
@@ -176,7 +179,11 @@ Important caveats:
   remain review items.
 - The app does not silently substitute RBI rates, broker rates, market rates, or
   prior-business-day values.
-- The app does not automatically convert schedule values from the bundled table.
+- Supported USD capital-gain, dividend, other-source interest, and foreign-tax
+  rows receive a draft INR preview only when the derived calendar date has one
+  exact observation.
+- IBKR Interest rows default to other-source interest and remain flagged for
+  classification review.
 
 ### Company metadata
 

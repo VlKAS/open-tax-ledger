@@ -6,7 +6,6 @@ import {
 import { csvCell } from "./lib/export.js";
 import {
   enrichReviewWithReferenceData,
-  lookupUsdTtBuyRate,
   parseSbiReferenceRatesCsv,
   parseSecCompanyTickersExchange,
 } from "./lib/reference-data.js";
@@ -34,6 +33,7 @@ const state = {
   currentStep: "import",
   files: [],
   review: null,
+  reviewConfirmed: false,
   reviewTab: "overview",
   sourceKind: null,
   rateSourceKind: "bundled-community",
@@ -43,6 +43,7 @@ const state = {
 const MAX_FILE_COUNT = 5;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
+const MAX_PREVIEW_ROWS = 200;
 const stepOrder = ["import", "configure", "review", "export"];
 const elements = {
   auditFiles: document.querySelector('[data-audit="files"]'),
@@ -53,9 +54,8 @@ const elements = {
   importStatus: document.querySelector("[data-import-status]"),
   issueCount: document.querySelector("[data-issue-count]"),
   processButton: document.querySelector('[data-action="process"]'),
+  configConversionSummary: document.querySelector("[data-config-conversion-summary]"),
   rateFileInput: document.querySelector("[data-rate-file-input]"),
-  rateLookupDate: document.querySelector("[data-rate-lookup-date]"),
-  rateLookupResult: document.querySelector("[data-rate-lookup-result]"),
   rateStatus: document.querySelector("[data-rate-status]"),
   rateSummary: document.querySelector("[data-rate-summary]"),
   rateTableBody: document.querySelector("[data-rate-table-body]"),
@@ -75,6 +75,18 @@ function withReferenceData(review) {
 
 function selectStep(step) {
   if (!stepOrder.includes(step)) return;
+  if (step === "export" && !state.review) {
+    showToast("Load statements or the synthetic demo before exporting.");
+    step = "import";
+  } else if (step === "export" && !state.reviewConfirmed) {
+    state.reviewTab = "overview";
+    document.querySelectorAll("[data-review-tab]").forEach((button) => {
+      button.setAttribute("aria-selected", String(button.dataset.reviewTab === "overview"));
+    });
+    state.currentStep = "review";
+    showToast("Review the converted schedules before downloading.");
+    step = "review";
+  }
   state.currentStep = step;
   const activeIndex = stepOrder.indexOf(step);
 
@@ -133,6 +145,21 @@ function setRateStatus(message, kind = "") {
   elements.rateStatus.className = `inline-status${kind ? ` is-${kind}` : ""}`;
 }
 
+function invalidateReviewConfirmation() {
+  state.reviewConfirmed = false;
+}
+
+function discardParsedReviewForFileChange() {
+  state.review = null;
+  state.sourceKind = null;
+  state.reviewTab = "overview";
+  invalidateReviewConfirmation();
+  document.querySelectorAll("[data-review-tab]").forEach((button) => {
+    button.setAttribute("aria-selected", String(button.dataset.reviewTab === "overview"));
+  });
+  renderReview();
+}
+
 function appendTextCell(row, value) {
   const cell = document.createElement("td");
   cell.textContent = String(value ?? "—");
@@ -177,58 +204,6 @@ function renderReferenceData() {
     });
 }
 
-function renderRateLookup() {
-  const match = lookupUsdTtBuyRate(
-    state.usdTtBuyRates,
-    elements.rateLookupDate.value,
-  );
-  elements.rateLookupResult.replaceChildren();
-
-  const message = document.createElement("p");
-  if (match.status === "invalid-date") {
-    message.textContent = "Choose a date to perform an exact-date lookup.";
-    elements.rateLookupResult.append(message);
-    return;
-  }
-  if (match.status === "missing") {
-    message.textContent =
-      `No usable USD TT BUY row exists for ${match.date}. No prior-day or market-rate fallback was applied.`;
-    elements.rateLookupResult.append(message);
-    return;
-  }
-  if (match.status === "ambiguous") {
-    message.textContent =
-      `${match.observations.length} different intraday observations exist for ${match.date}. No rate was selected automatically.`;
-    elements.rateLookupResult.append(message);
-    const list = document.createElement("ul");
-    match.observations.forEach((observation) => {
-      const item = document.createElement("li");
-      item.textContent = `${observation.timestamp}: ₹${formatNumber(observation.rate)} per USD`;
-      list.append(item);
-    });
-    elements.rateLookupResult.append(list);
-    return;
-  }
-
-  const strong = document.createElement("strong");
-  strong.textContent = `${match.date}: ₹${formatNumber(match.rate)} per USD`;
-  message.append(strong, document.createTextNode(" · community reference"));
-  elements.rateLookupResult.append(message);
-
-  const href = safeExternalUrl(match.sourceUrl);
-  if (href) {
-    const link = document.createElement("a");
-    link.href = href;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent =
-      state.rateSourceKind === "user-supplied"
-        ? "Open user-supplied evidence URL"
-        : "Open archived source evidence";
-    elements.rateLookupResult.append(link);
-  }
-}
-
 async function importRateFile() {
   const file = elements.rateFileInput.files?.[0];
   if (!file) return;
@@ -252,12 +227,12 @@ async function importRateFile() {
     }
     state.usdTtBuyRates = table;
     state.rateSourceKind = "user-supplied";
+    invalidateReviewConfirmation();
     if (state.review) {
       state.review = withReferenceData(state.review);
       renderReview();
     }
     renderReferenceData();
-    renderRateLookup();
     setRateStatus(
       `Loaded ${table.count.toLocaleString("en-IN")} usable USD rates from ${file.name}.`,
       "success",
@@ -307,6 +282,7 @@ function updateFileList() {
     remove.setAttribute("aria-label", `Remove ${file.name}`);
     remove.addEventListener("click", () => {
       state.files.splice(index, 1);
+      discardParsedReviewForFileChange();
       updateFileList();
     });
 
@@ -326,6 +302,7 @@ function updateFileList() {
 }
 
 function addFiles(files) {
+  const initialFileCount = state.files.length;
   const known = new Set(state.files.map((file) => `${file.name}:${file.size}:${file.lastModified}`));
   let totalBytes = state.files.reduce((sum, file) => sum + file.size, 0);
   let invalidType = 0;
@@ -362,6 +339,9 @@ function addFiles(files) {
     totalBytes += file.size;
   }
 
+  if (state.files.length !== initialFileCount) {
+    discardParsedReviewForFileChange();
+  }
   updateFileList();
   if (invalidType > 0) {
     setImportStatus("Only CSV files were added; other formats were ignored.", "error");
@@ -389,6 +369,7 @@ async function processFiles() {
       fileNames: state.files.map((file) => file.name),
     });
     state.review = withReferenceData(buildReviewModel(parsed));
+    invalidateReviewConfirmation();
     state.sourceKind = "user";
     renderReview();
     setImportStatus(
@@ -412,6 +393,7 @@ async function processFiles() {
 
 function loadDemo() {
   state.review = withReferenceData(makeDemoReview());
+  invalidateReviewConfirmation();
   state.sourceKind = "demo";
   state.files = [];
   updateFileList();
@@ -439,20 +421,42 @@ function humanizeKey(key) {
     .replace(/^\w/, (letter) => letter.toUpperCase());
 }
 
-function renderTable(rows, columns) {
+function renderTable(rows, columns, options = {}) {
   if (!rows?.length) {
     return '<div class="empty-review">No source rows were mapped to this working table.</div>';
   }
 
+  const visibleRows = options.limit === false ? rows : rows.slice(0, options.limit ?? 50);
   const header = columns
     .map(({ label }) => `<th scope="col">${escapeHtml(label)}</th>`)
     .join("");
-  const body = rows
-    .slice(0, 50)
+  const body = visibleRows
     .map((row) => {
       const cells = columns
-        .map(({ key, format, value: getValue }) => {
+        .map(({ key, format, value: getValue, linkLabel, links: getLinks }) => {
           const rawValue = getValue ? getValue(row) : row[key];
+          if (getLinks) {
+            const links = (getLinks(row) ?? [])
+              .map(({ url, label }) => ({
+                href: safeExternalUrl(url),
+                label: String(label ?? "View source"),
+              }))
+              .filter(({ href }) => href);
+            return links.length
+              ? `<td>${links
+                  .map(
+                    ({ href, label }) =>
+                      `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`,
+                  )
+                  .join("<br>")}</td>`
+              : "<td>Unavailable</td>";
+          }
+          if (linkLabel) {
+            const href = safeExternalUrl(rawValue);
+            return href
+              ? `<td><a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(linkLabel)}</a></td>`
+              : "<td>Unavailable</td>";
+          }
           const value = format === "number" ? formatNumber(rawValue) : rawValue;
           return `<td>${escapeHtml(value === true ? "Rate needed" : value === false ? "Ready" : value)}</td>`;
         })
@@ -464,6 +468,213 @@ function renderTable(rows, columns) {
   return `<table class="data-table"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
+function renderPreviewTable(rows, columns) {
+  const hiddenRows = Math.max((rows?.length ?? 0) - MAX_PREVIEW_ROWS, 0);
+  return `${renderTable(rows, columns, { limit: MAX_PREVIEW_ROWS })}${
+    hiddenRows > 0
+      ? `<p class="muted preview-limit-note">Showing the first ${MAX_PREVIEW_ROWS} rows; ${escapeHtml(hiddenRows)} more remain in the downloadable exports.</p>`
+      : ""
+  }`;
+}
+
+function formatConversionObservations(observations = []) {
+  return (Array.isArray(observations) ? observations : [])
+    .map((observation) => {
+      const timestamp = String(observation.timestamp ?? "Unknown time");
+      const rate = Number.isFinite(Number(observation.rate))
+        ? formatNumber(observation.rate)
+        : "Unknown rate";
+      return `${timestamp}: ${rate}`;
+    })
+    .join("; ");
+}
+
+function conversionEvidenceUrls(conversion = {}) {
+  return [
+    conversion.sourceUrl,
+    ...(Array.isArray(conversion.observations) ? conversion.observations : []).map(
+      (observation) => observation.sourceUrl,
+    ),
+  ]
+    .map((value) => String(value ?? "").trim())
+    .filter((value, index, values) => value && values.indexOf(value) === index);
+}
+
+function conversionFor(row) {
+  return row?.conversion ?? {};
+}
+
+function conversionStatus(row) {
+  const conversion = conversionFor(row);
+  return conversion.status || (row?.needsFx ? "missing" : "not-required");
+}
+
+function conversionStatusLabel(row) {
+  return humanizeKey(conversionStatus(row));
+}
+
+function conversionSpecifiedDate(row) {
+  return conversionFor(row).specifiedDate || conversionFor(row).eventDate || row?.date || "—";
+}
+
+function conversionFcy(row, fallbackKey) {
+  const amount = conversionFor(row).amountForeign;
+  return Number.isFinite(Number(amount)) ? amount : row?.[fallbackKey];
+}
+
+function conversionInr(row) {
+  const amount = conversionFor(row).amountInr;
+  return Number.isFinite(Number(amount)) ? amount : "";
+}
+
+function allConversionRows() {
+  const schedules = state.review?.schedules ?? {};
+  return [
+    ...(schedules.capitalGains ?? []).map((row) => ({ ...row, schedule: "Capital gains" })),
+    ...(schedules.fsi ?? []).map((row) => ({ ...row, schedule: "FSI" })),
+    ...(schedules.tr ?? []).map((row) => ({ ...row, schedule: "TR" })),
+  ];
+}
+
+function conversionLedgerRows() {
+  const ledger = new Map();
+  for (const row of allConversionRows()) {
+    const conversion = conversionFor(row);
+    const specifiedDate = conversion.specifiedDate || conversion.eventDate || row.date || "";
+    const status = conversion.status || (row.needsFx ? "missing" : "not-required");
+    const sourceUrl = conversion.sourceUrl || "";
+    const evidenceUrls = conversionEvidenceUrls(conversion);
+    const key = [
+      row.schedule,
+      conversion.category || "",
+      specifiedDate,
+      status,
+      conversion.rate ?? "",
+      sourceUrl,
+    ].join("\u0000");
+    const current = ledger.get(key) ?? {
+      schedule: row.schedule,
+      category: conversion.category || row.incomeType || row.assetCategory || "—",
+      eventDate: conversion.eventDate || row.date || "—",
+      specifiedDate: specifiedDate || "—",
+      dateRule: conversion.dateRule || "Exact date only",
+      status,
+      rate: conversion.rate ?? "",
+      sourceUrl,
+      fcyRows: 0,
+      amountForeign: 0,
+      amountInr: 0,
+      observationCount: conversion.observations?.length ?? 0,
+      candidateObservations: formatConversionObservations(conversion.observations),
+      evidenceUrls: evidenceUrls.join("\n"),
+      classificationReview: conversion.classificationReview || "",
+    };
+    current.fcyRows += 1;
+    current.amountForeign += Number(conversion.amountForeign ?? 0);
+    current.amountInr += Number(conversion.amountInr ?? 0);
+    ledger.set(key, current);
+  }
+  return [...ledger.values()].sort(
+    (left, right) =>
+      String(left.specifiedDate).localeCompare(String(right.specifiedDate)) ||
+      String(left.schedule).localeCompare(String(right.schedule)) ||
+      String(left.category).localeCompare(String(right.category)),
+  );
+}
+
+function fallbackConversionSummary() {
+  const rows = allConversionRows();
+  const totalsInr = {
+    capitalGains: 0,
+    dividends: 0,
+    interest: 0,
+    foreignTax: 0,
+  };
+  const completeness = {
+    capitalGains: { total: 0, converted: 0 },
+    dividends: { total: 0, converted: 0 },
+    interest: { total: 0, converted: 0 },
+    foreignTax: { total: 0, converted: 0 },
+  };
+  const summary = {
+    total: rows.length,
+    matched: 0,
+    missing: 0,
+    ambiguous: 0,
+    unsupported: 0,
+    notRequired: 0,
+    dates: conversionLedgerRows().length,
+    totalsInr,
+    completeness,
+  };
+
+  for (const row of rows) {
+    const status = conversionStatus(row);
+    const statusKey =
+      status === "not-required"
+        ? "notRequired"
+        : ["invalid-date", "unsupported-currency"].includes(status)
+          ? "unsupported"
+          : status;
+    summary[statusKey] = Number(summary[statusKey] ?? 0) + 1;
+    const conversion = conversionFor(row);
+    const amountInr = Number(conversion.amountInr ?? 0);
+    let bucket = "capitalGains";
+    if (row.schedule === "TR") {
+      bucket = "foreignTax";
+    } else if (row.incomeType === "interest") {
+      bucket = "interest";
+    } else if (row.incomeType === "dividend") {
+      bucket = "dividends";
+    }
+    totalsInr[bucket] += amountInr;
+    completeness[bucket].total += 1;
+    if (status === "matched" || status === "not-required") {
+      completeness[bucket].converted += 1;
+    }
+  }
+  return summary;
+}
+
+function getConversionSummary() {
+  return state.review?.conversionSummary ?? fallbackConversionSummary();
+}
+
+function completenessLabel(value) {
+  if (!value || !value.total) return "No rows";
+  return `${value.converted}/${value.total} rows`;
+}
+
+function renderConfigureConversionSummary() {
+  if (!elements.configConversionSummary) return;
+  const result = elements.configConversionSummary.querySelector(".rate-result");
+  if (!result) return;
+  if (!state.review) {
+    result.innerHTML = "Load a statement or the synthetic demo to see required conversion dates.";
+    return;
+  }
+
+  const summary = getConversionSummary();
+  const ledger = conversionLedgerRows();
+  result.innerHTML = `
+    <div class="conversion-mini-grid" aria-label="Conversion coverage">
+      <span><strong>${escapeHtml(String(summary.dates ?? ledger.length))}</strong> prescribed dates</span>
+      <span><strong>${escapeHtml(String(summary.matched ?? 0))}</strong> matched</span>
+      <span><strong>${escapeHtml(String(summary.missing ?? 0))}</strong> missing</span>
+      <span><strong>${escapeHtml(String(summary.ambiguous ?? 0))}</strong> ambiguous</span>
+    </div>
+    ${renderPreviewTable(ledger, [
+      { key: "schedule", label: "Schedule" },
+      { key: "category", label: "Category" },
+      { key: "specifiedDate", label: "Specified date" },
+      { key: "dateRule", label: "Date rule" },
+      { key: "status", label: "TTBR status" },
+      { key: "rate", label: "TTBR", format: "number" },
+      { key: "amountInr", label: "INR total", format: "number" },
+      { key: "candidateObservations", label: "Conflicting candidates" },
+    ])}`;
+}
+
 function renderReviewTab() {
   if (!state.review) {
     elements.reviewContent.innerHTML =
@@ -471,39 +682,40 @@ function renderReviewTab() {
     return;
   }
 
-  const { schedules, summary, totals } = state.review;
+  const { schedules } = state.review;
+  const conversionSummary = getConversionSummary();
   if (state.reviewTab === "overview") {
     elements.reviewContent.innerHTML = `
       <div class="review-summary">
         <div class="summary-block">
-          <small>Realized P/L · broker reference</small>
-          <strong>${escapeHtml(formatNumber(totals.realizedProfitLoss))}</strong>
-          <span>Foreign-currency values; Indian recomputation still required</span>
+          <small>Capital gains · INR review</small>
+          <strong>₹${escapeHtml(formatNumber(conversionSummary.totalsInr?.capitalGains))}</strong>
+          <span>${escapeHtml(completenessLabel(conversionSummary.completeness?.capitalGains))}</span>
         </div>
         <div class="summary-block">
-          <small>Dividends · broker reference</small>
-          <strong>${escapeHtml(formatNumber(totals.dividends))}</strong>
-          <span>${summary.dividends} source row${summary.dividends === 1 ? "" : "s"}</span>
+          <small>Dividends · INR review</small>
+          <strong>₹${escapeHtml(formatNumber(conversionSummary.totalsInr?.dividends))}</strong>
+          <span>${escapeHtml(completenessLabel(conversionSummary.completeness?.dividends))}</span>
         </div>
         <div class="summary-block">
-          <small>Foreign withholding</small>
-          <strong>${escapeHtml(formatNumber(Math.abs(totals.withholdingTax)))}</strong>
-          <span>FTC eligibility and country mapping require review</span>
+          <small>Interest · INR review</small>
+          <strong>₹${escapeHtml(formatNumber(conversionSummary.totalsInr?.interest))}</strong>
+          <span>${escapeHtml(completenessLabel(conversionSummary.completeness?.interest))}</span>
         </div>
         <div class="summary-block">
-          <small>Open positions · closing value</small>
-          <strong>${escapeHtml(formatNumber(totals.openPositionValue))}</strong>
-          <span>Peak value and Rule 115 conversion not inferred</span>
+          <small>Foreign tax · INR review</small>
+          <strong>₹${escapeHtml(formatNumber(conversionSummary.totalsInr?.foreignTax))}</strong>
+          <span>${escapeHtml(completenessLabel(conversionSummary.completeness?.foreignTax))}</span>
         </div>
         <div class="summary-block">
-          <small>Reference coverage</small>
-          <strong>${escapeHtml(state.review.referenceData.companyLookup.records.toLocaleString("en-IN"))}</strong>
-          <span>Offline SEC ticker associations · no live provider call</span>
+          <small>TTBR coverage</small>
+          <strong>${escapeHtml(formatNumber(conversionSummary.matched ?? 0))}/${escapeHtml(formatNumber(conversionSummary.total ?? 0))}</strong>
+          <span>${escapeHtml(formatNumber(conversionSummary.missing ?? 0))} missing · ${escapeHtml(formatNumber(conversionSummary.ambiguous ?? 0))} ambiguous</span>
         </div>
         <div class="summary-block">
-          <small>USD TT BUY reference</small>
-          <strong>${escapeHtml(state.review.referenceData.usdTtBuyRates.records.toLocaleString("en-IN"))}</strong>
-          <span>Community archive rows · exact-date lookup only</span>
+          <small>Prescribed dates</small>
+          <strong>${escapeHtml(formatNumber(conversionSummary.dates ?? conversionLedgerRows().length))}</strong>
+          <span>Exact-date ledger · no prior-business-day shift</span>
         </div>
       </div>`;
     return;
@@ -520,6 +732,11 @@ function renderReviewTab() {
       { key: "proceeds", label: "Proceeds", format: "number" },
       { key: "costBasis", label: "IBKR basis", format: "number" },
       { key: "realizedProfitLoss", label: "IBKR P/L", format: "number" },
+      { label: "Specified date", value: conversionSpecifiedDate },
+      { label: "TTBR status", value: conversionStatusLabel },
+      { label: "Rate", value: (row) => conversionFor(row).rate, format: "number" },
+      { label: "FCY amount", value: (row) => conversionFcy(row, "proceeds"), format: "number" },
+      { label: "INR amount", value: conversionInr, format: "number" },
     ]);
     return;
   }
@@ -540,23 +757,45 @@ function renderReviewTab() {
       { key: "currency", label: "CCY" },
       { key: "description", label: "Source description" },
       { key: "amount", label: "Amount", format: "number" },
-      { key: "needsFx", label: "FX status" },
+      { label: "Specified date", value: conversionSpecifiedDate },
+      { label: "TTBR status", value: conversionStatusLabel },
+      { label: "Rate", value: (row) => conversionFor(row).rate, format: "number" },
+      { label: "FCY amount", value: (row) => conversionFcy(row, "amount"), format: "number" },
+      { label: "INR amount", value: conversionInr, format: "number" },
     ]);
     return;
   }
 
   if (state.reviewTab === "ttbr") {
-    const rows = state.usdTtBuyRates.records.slice(-50).reverse();
+    const rows = conversionLedgerRows();
     elements.reviewContent.innerHTML = `
       <div class="reference-table-note">
-        <strong>USD TT BUY community reference</strong>
-        <span>Latest 50 usable dates. No prior-day fallback and no automatic tax conversion.</span>
+        <strong>Rule 115 / TTBR prescribed-date ledger</strong>
+        <span>Derived from applicable schedule rows. Exact-date status is reported without fallback.</span>
         <a href="./data/sbi-usd-tt-buy-community.csv" download>Download the complete CSV</a>
       </div>
-      ${renderTable(rows, [
-        { key: "timestamp", label: "Published at" },
-        { key: "currency", label: "Currency" },
-        { key: "ttBuy", label: "TT BUY (INR)", format: "number" },
+      ${renderPreviewTable(rows, [
+        { key: "schedule", label: "Schedule" },
+        { key: "category", label: "Category" },
+        { key: "eventDate", label: "Event date" },
+        { key: "specifiedDate", label: "Specified date" },
+        { key: "dateRule", label: "Date rule" },
+        { key: "status", label: "TTBR status" },
+        { key: "rate", label: "TTBR", format: "number" },
+        { key: "fcyRows", label: "Rows", format: "number" },
+        { key: "amountForeign", label: "FCY total", format: "number" },
+        { key: "amountInr", label: "INR total", format: "number" },
+        { key: "candidateObservations", label: "Conflicting candidates" },
+        {
+          label: "Evidence",
+          links: (row) => {
+            const urls = String(row.evidenceUrls ?? "").split("\n").filter(Boolean);
+            return urls.map((url, index) => ({
+              url,
+              label: urls.length === 1 ? "View source" : `View candidate ${index + 1}`,
+            }));
+          },
+        },
       ])}`;
     return;
   }
@@ -637,15 +876,18 @@ function renderReview() {
       (summary.interest ?? 0) +
       (summary.transfers ?? 0),
   );
-  elements.reviewStamp.textContent = validations.some((finding) => finding.severity === "error")
-    ? "Blocked"
-    : validations.length
-      ? "Needs review"
-      : "Draft ready";
-  elements.reviewStamp.className = validations.length
-    ? "stamp stamp-review"
-    : "stamp stamp-ready";
+  elements.reviewStamp.textContent = state.reviewConfirmed
+    ? "Review checked"
+    : validations.some((finding) => finding.severity === "error")
+      ? "Blocked"
+      : validations.length
+        ? "Needs review"
+        : "Draft ready";
+  elements.reviewStamp.className = state.reviewConfirmed || !validations.length
+    ? "stamp stamp-ready"
+    : "stamp stamp-review";
 
+  renderConfigureConversionSummary();
   renderReviewTab();
   renderValidations();
 }
@@ -675,10 +917,22 @@ function reportTable(title, rows) {
 }
 
 function flattenCompany(row) {
-  const { company, ...rest } = row;
-  if (!company) return rest;
+  const { company, conversion, ...rest } = row;
+  const flattened = { ...rest };
+  if (conversion) {
+    for (const [key, value] of Object.entries(conversion)) {
+      if (key === "observations") {
+        flattened.conversionObservationCount = value?.length ?? 0;
+        flattened.conversionCandidateObservations = formatConversionObservations(value);
+        flattened.conversionEvidenceUrls = conversionEvidenceUrls(conversion).join("; ");
+      } else {
+        flattened[`conversion${key.replace(/^\w/, (letter) => letter.toUpperCase())}`] = value;
+      }
+    }
+  }
+  if (!company) return flattened;
   return {
-    ...rest,
+    ...flattened,
     companyName: company.name,
     companyExchange: company.exchange,
     companyCik: company.cik,
@@ -696,6 +950,7 @@ function makeReport() {
     message,
   }));
   const sourceLabel = state.sourceKind === "demo" ? "Synthetic demo" : "User-selected local statements";
+  const conversionSummary = getConversionSummary();
 
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>OpenTax Ledger CA Review</title>
@@ -714,6 +969,22 @@ ${reportTable("Capital Gains working table", review.schedules.capitalGains.map(f
 ${reportTable("Schedule FSI working table", review.schedules.fsi.map(flattenCompany))}
 ${reportTable("Schedule TR working table", review.schedules.tr.map(flattenCompany))}
 ${reportTable("Schedule FA working table", review.schedules.fa.map(flattenCompany))}
+${reportTable("Rule 115 / TTBR conversion summary", [
+  {
+    total: conversionSummary.total,
+    matched: conversionSummary.matched,
+    missing: conversionSummary.missing,
+    ambiguous: conversionSummary.ambiguous,
+    unsupported: conversionSummary.unsupported,
+    notRequired: conversionSummary.notRequired,
+    prescribedDates: conversionSummary.dates,
+    capitalGainsInr: conversionSummary.totalsInr?.capitalGains,
+    dividendsInr: conversionSummary.totalsInr?.dividends,
+    interestInr: conversionSummary.totalsInr?.interest,
+    foreignTaxInr: conversionSummary.totalsInr?.foreignTax,
+  },
+])}
+${reportTable("Rule 115 / TTBR prescribed-date ledger", conversionLedgerRows())}
 ${reportTable("Reference-data provenance", [
   review.referenceData.usdTtBuyRates,
   review.referenceData.companyLookup,
@@ -726,10 +997,7 @@ ${reportTable("Validation register", validationRows)}
 }
 
 function exportReport() {
-  if (!state.review) {
-    showToast("Load statements or the synthetic demo before exporting.");
-    return;
-  }
+  if (!ensureExportReady()) return;
   downloadBlob(
     "opentax-ledger-ca-review.html",
     "text/html;charset=utf-8",
@@ -739,10 +1007,7 @@ function exportReport() {
 }
 
 function exportJson() {
-  if (!state.review) {
-    showToast("Load statements or the synthetic demo before exporting.");
-    return;
-  }
+  if (!ensureExportReady()) return;
   const {
     generatedAt,
     source,
@@ -757,6 +1022,7 @@ function exportJson() {
     checklist,
     referenceData,
   } = state.review;
+  const conversionSummary = getConversionSummary();
   downloadBlob(
     "opentax-ledger-audit.json",
     "application/json;charset=utf-8",
@@ -779,6 +1045,8 @@ function exportJson() {
           stats,
           checklist,
           referenceData,
+          conversionSummary,
+          conversionLedger: conversionLedgerRows(),
         },
       },
       null,
@@ -789,10 +1057,7 @@ function exportJson() {
 }
 
 function exportCsv() {
-  if (!state.review) {
-    showToast("Load statements or the synthetic demo before exporting.");
-    return;
-  }
+  if (!ensureExportReady()) return;
 
   const scheduleEntries = [
     ["Capital Gains", state.review.schedules.capitalGains.map(flattenCompany)],
@@ -818,23 +1083,36 @@ function exportCsv() {
 function resetSession() {
   state.files = [];
   state.review = null;
+  invalidateReviewConfirmation();
   state.reviewTab = "overview";
   state.sourceKind = null;
   state.rateSourceKind = "bundled-community";
   state.usdTtBuyRates = BUNDLED_USD_TT_BUY_RATES;
   elements.fileInput.value = "";
   elements.rateFileInput.value = "";
-  elements.rateLookupDate.value = "";
   document.querySelectorAll("[data-review-tab]").forEach((button) => {
     button.setAttribute("aria-selected", String(button.dataset.reviewTab === "overview"));
   });
   updateFileList();
   renderReferenceData();
-  renderRateLookup();
   setRateStatus("Using the bundled, pinned community USD reference table.");
   renderReview();
   selectStep("import");
   showToast("Local session cleared.");
+}
+
+function ensureExportReady() {
+  if (!state.review) {
+    showToast("Load statements or the synthetic demo before exporting.");
+    selectStep("import");
+    return false;
+  }
+  if (!state.reviewConfirmed) {
+    selectStep("review");
+    showToast("Review the converted schedules before downloading.");
+    return false;
+  }
+  return true;
 }
 
 document.querySelectorAll("[data-step-target], [data-go-step]").forEach((button) => {
@@ -847,9 +1125,12 @@ elements.fileInput.addEventListener("change", () => {
   addFiles(elements.fileInput.files ?? []);
 });
 elements.rateFileInput.addEventListener("change", importRateFile);
-document
-  .querySelector('[data-action="lookup-rate"]')
-  .addEventListener("click", renderRateLookup);
+document.querySelectorAll("[data-config]").forEach((input) => {
+  input.addEventListener("change", () => {
+    invalidateReviewConfirmation();
+    renderReview();
+  });
+});
 
 const dropZone = document.querySelector("[data-drop-zone]");
 dropZone.addEventListener("dragover", (event) => {
@@ -876,6 +1157,17 @@ document.querySelectorAll("[data-review-tab]").forEach((button) => {
   });
 });
 
+document.querySelector('[data-action="confirm-review"]').addEventListener("click", () => {
+  if (!state.review) {
+    showToast("Load statements or the synthetic demo before reviewing.");
+    selectStep("import");
+    return;
+  }
+  state.reviewConfirmed = true;
+  renderReview();
+  selectStep("export");
+});
+
 document.querySelectorAll("[data-action='clear']").forEach((button) => {
   button.addEventListener("click", () => elements.clearDialog.showModal());
 });
@@ -889,6 +1181,5 @@ document.querySelector('[data-export="csv"]').addEventListener("click", exportCs
 
 updateFileList();
 renderReferenceData();
-renderRateLookup();
 renderReview();
 selectStep("import");

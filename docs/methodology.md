@@ -28,17 +28,23 @@ Official references:
   <https://www.incometaxindia.gov.in/w/rule-115-2>
 - Income Tax Rule 26:
   <https://www.incometaxindia.gov.in/w/rule-26-8>
+- Income Tax Rule 128:
+  <https://www.incometaxindia.gov.in/w/rule-128-1>
 
 ## Pipeline
 
-The intended pipeline has six stages:
+The intended pipeline has eight stages:
 
 1. Import the IBKR CSV in the browser.
 2. Parse raw sections and retain row lineage.
 3. Normalize rows into a canonical ledger.
 4. Enrich supported tickers from the bundled offline SEC reference snapshot.
-5. Map ledger entries into draft schedule tables.
-6. Produce reconciliation checks and reviewer warnings.
+5. Derive supported Rule 115 specified dates and Rule 128 foreign-tax rate
+   dates from statement events.
+6. Apply a rate only when the local USD table contains one unambiguous
+   observation on that exact calendar date.
+7. Map ledger entries into draft schedule tables and INR previews.
+8. Produce reconciliation checks and reviewer warnings.
 
 Each computed value should be traceable back to source rows. When a value cannot
 be supported by imported evidence, the app should show a warning instead of
@@ -72,8 +78,20 @@ Default assumptions should be visible in the output:
 - FX conversion must be reviewable and should identify the source and date basis
   used by the implementation.
 - The bundled USD TT BUY table is community-maintained reference material, not
-  an official SBI historical feed. It is never applied to schedule values
-  automatically.
+  an official SBI historical feed. Exact matches can populate draft INR
+  previews, but reviewers must retain and verify primary SBI evidence for
+  material dates.
+- For capital gains, the app derives the last calendar day of the month before
+  the statement transfer month.
+- For dividends, the app uses the IBKR statement payment date and derives the
+  last calendar day of the preceding month. Confirm the applicable
+  declaration, distribution, or payment event when those events fall in
+  different months.
+- IBKR Interest rows default to other-source interest and therefore use the
+  Indian financial-year end. This classification remains an explicit reviewer
+  check because interest on securities follows a different Rule 115 date.
+- Foreign tax rows use the last calendar day of the month before payment or
+  deduction for the draft Rule 128 conversion preview.
 - USD rate lookup is exact-date only. Missing dates and conflicting intraday
   observations remain manual review items; the app does not silently use a
   prior business day, RBI rate, broker rate, or market-rate vendor.
@@ -93,6 +111,8 @@ Do not rely on OpenTax Ledger for:
 - Resident status determination.
 - Treaty eligibility determination.
 - Final ITR form selection.
+- Final classification of IBKR Interest rows as other-source interest or
+  interest on securities.
 
 Unsupported rows should remain visible in the checks output.
 

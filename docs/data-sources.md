@@ -19,6 +19,8 @@ Official references:
   <https://www.incometaxindia.gov.in/w/rule-115-2>
 - Income Tax Rule 26 explanation defining telegraphic transfer buying rate:
   <https://www.incometaxindia.gov.in/w/rule-26-8>
+- Income Tax Rule 128 governing foreign tax credit conversion:
+  <https://www.incometaxindia.gov.in/w/rule-128-1>
 - SBI current Forex Card Rates PDF:
   <https://sbi.bank.in/documents/16012/1400784/FOREX_CARD_RATES.pdf>
 
@@ -55,10 +57,25 @@ values remain a community archive derived from SBI-published evidence; that
 license does not make the table an official SBI source. OpenTax Ledger does not
 bundle SBI PDF files.
 
-The app does not substitute RBI reference rates, OANDA rates, broker rates, or
-other market FX rates when SBI TT buying data is missing. It also does not
-automatically convert draft tax schedules from the bundled table. Missing or
-ambiguous rate dates remain review items.
+For supported USD income rows, the app derives the statutory calendar date and
+uses the bundled table to create a draft INR preview only when one exact,
+unambiguous observation exists. It does not substitute RBI reference rates,
+OANDA rates, broker rates, other market FX rates, or a prior-business-day value
+when that observation is missing. Missing or ambiguous rate dates remain review
+items.
+
+Date derivation follows the official rule text:
+
+- capital gains: last day of the month before the transfer month;
+- dividends: last day of the month before the statement payment month;
+- broker cash interest treated as other-source interest: last day of the
+  financial year, with classification flagged for review; and
+- foreign tax credit conversion: last day of the month before foreign tax was
+  paid or deducted under Rule 128(5)(ii).
+
+Rule 115 itself does not move a specified date that falls on a weekend or bank
+holiday. The exact calendar date remains visible even when the local table has
+no observation for it.
 
 ## Company Metadata
 

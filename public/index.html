@@ -351,25 +351,19 @@
                   Using the bundled, pinned community USD reference table.
                 </div>
 
-                <div class="rate-lookup">
+                <div class="conversion-date-summary" data-config-conversion-summary>
                   <div>
-                    <span class="panel-kicker">Exact-date lookup</span>
-                    <h5>Find a USD TT BUY observation</h5>
+                    <span class="panel-kicker">Derived prescribed-date ledger</span>
+                    <h5>Automatic Rule 115 date summary</h5>
                     <p>
-                      Choose the prescribed date determined under Rule 115. The app
-                      does not infer that date or substitute the prior business day.
+                      Dates are derived from reviewed schedule rows after reference
+                      enrichment. Exact-date TT buying status is shown as-is; no
+                      prior-business-day shift is applied.
                     </p>
                   </div>
-                  <div class="rate-lookup-controls">
-                    <label>
-                      <span>Required rate date</span>
-                      <input type="date" data-rate-lookup-date />
-                    </label>
-                    <button class="button button-secondary" type="button" data-action="lookup-rate">
-                      Look up exact date
-                    </button>
+                  <div class="rate-result" aria-live="polite">
+                    Load a statement or the synthetic demo to see required conversion dates.
                   </div>
-                  <div class="rate-result" data-rate-lookup-result aria-live="polite"></div>
                 </div>
 
                 <div class="table-scroll reference-table">
@@ -391,8 +385,8 @@
                 <strong>Community data is not an official historical SBI feed</strong>
                 <p>
                   Rule 115 and Rule 26 point to SBI’s TT buying rate. Verify material
-                  dates against retained primary evidence. The table never converts
-                  a draft schedule automatically.
+                  dates against retained primary evidence. Exact matches populate
+                  draft INR previews; missing or conflicting evidence remains visible.
                 </p>
               </div>
 
@@ -429,7 +423,7 @@
                 <button role="tab" aria-selected="false" data-review-tab="capitalGains">Capital gains</button>
                 <button role="tab" aria-selected="false" data-review-tab="fsi">FSI / TR</button>
                 <button role="tab" aria-selected="false" data-review-tab="fa">Schedule FA</button>
-                <button role="tab" aria-selected="false" data-review-tab="ttbr">USD TTBR</button>
+                <button role="tab" aria-selected="false" data-review-tab="ttbr">Rule 115 / TTBR</button>
               </div>
               <div class="review-content" data-review-content>
                 <div class="empty-review">
@@ -452,8 +446,8 @@
 
               <div class="panel-actions">
                 <button class="button button-quiet" type="button" data-go-step="configure">Back</button>
-                <button class="button button-primary" type="button" data-go-step="export">
-                  Prepare handoff
+                <button class="button button-primary" type="button" data-action="confirm-review">
+                  I reviewed this preview · continue to downloads
                 </button>
               </div>
             </section>
@@ -594,8 +588,9 @@
               <li>Foreign-listed equity and ETF source rows</li>
               <li>Dividends, withholding, interest, and open positions</li>
               <li>Draft CG / FSI / TR / FA review tables</li>
-              <li>Pinned community USD TT BUY table and local CSV override</li>
-              <li>Offline SEC company, ticker, exchange, and CIK associations</li>
+                  <li>Pinned community USD TT BUY table and local CSV override</li>
+                  <li>Automatic Rule 115 / Rule 128 prescribed-date derivation and INR previews</li>
+                  <li>Offline SEC company, ticker, exchange, and CIK associations</li>
               <li>Validation findings and source audit counts</li>
             </ul>
           </article>
@@ -606,7 +601,7 @@
               <li>Direct ITR or Form 67 submission</li>
               <li>Options, futures, shorts, bonds, forex, or business-income classification</li>
               <li>Corporate actions and transferred-in lots with missing basis</li>
-              <li>An official historical SBI archive or automatic Rule 115 date selection</li>
+                  <li>An official historical SBI archive or silent nearest-date rate substitution</li>
               <li>Final tax liability or professional advice</li>
             </ul>
           </article>

@@ -179,6 +179,228 @@ test("enrichReviewWithReferenceData adds metadata without mutating the review mo
   assert.equal(enriched.referenceData.companyLookup.records, 2);
 });
 
+test("reference enrichment derives exact Rule 115 and Rule 128 dates and INR previews", () => {
+  const review = {
+    schedules: {
+      capitalGains: [
+        {
+          symbol: "AAPL",
+          date: "2026-01-15",
+          currency: "USD",
+          realizedProfitLoss: 149,
+          needsFx: true,
+        },
+      ],
+      fsi: [
+        {
+          incomeType: "dividend",
+          date: "2025-08-15",
+          currency: "USD",
+          description: "AAPL CASH DIVIDEND",
+          amount: 12.5,
+          needsFx: true,
+        },
+        {
+          incomeType: "interest",
+          date: "2025-09-30",
+          currency: "USD",
+          description: "BROKER CREDIT INTEREST",
+          amount: 1.25,
+          needsFx: true,
+        },
+      ],
+      tr: [
+        {
+          date: "2025-08-15",
+          currency: "USD",
+          description: "AAPL US TAX WITHHELD",
+          taxPaid: 3.75,
+          needsFx: true,
+        },
+      ],
+      fa: [{ symbol: "AAPL", currency: "USD", value: 1_100, needsFx: true }],
+    },
+    validations: [
+      {
+        severity: "warning",
+        code: "MISSING_FX",
+        message: "Missing rates",
+      },
+    ],
+  };
+  const rates = parseSbiReferenceRatesCsv(
+    [
+      "DATE,TT BUY,source url",
+      "2025-07-31,86,https://example.test/2025-07-31.pdf",
+      "2025-12-31,90,https://example.test/2025-12-31.pdf",
+      "2026-03-31,92,https://example.test/2026-03-31.pdf",
+    ].join("\n"),
+    {
+      provider: "Community test archive",
+      license: "Community reference",
+    },
+  );
+
+  const enriched = enrichReviewWithReferenceData(review, {
+    usdTtBuyRates: rates,
+    companyLookup: {},
+  });
+
+  assert.deepEqual(
+    enriched.schedules.capitalGains[0].conversion,
+    {
+      authority: "Rule 115",
+      category: "capital-gains",
+      eventDate: "2026-01-15",
+      specifiedDate: "2025-12-31",
+      dateRule:
+        "Last calendar day of the month immediately preceding the transfer month.",
+      classificationReview: false,
+      status: "matched",
+      rate: 90,
+      sourceUrl: "https://example.test/2025-12-31.pdf",
+      observations: [],
+      currency: "USD",
+      amountForeign: 149,
+      amountInr: 13_410,
+      exactDateOnly: true,
+    },
+  );
+  assert.equal(enriched.schedules.fsi[0].conversion.specifiedDate, "2025-07-31");
+  assert.equal(enriched.schedules.fsi[0].conversion.amountInr, 1_075);
+  assert.equal(enriched.schedules.fsi[1].conversion.specifiedDate, "2026-03-31");
+  assert.equal(enriched.schedules.fsi[1].conversion.amountInr, 115);
+  assert.equal(enriched.schedules.fsi[1].conversion.classificationReview, true);
+  assert.equal(enriched.schedules.tr[0].conversion.authority, "Rule 128(5)(ii)");
+  assert.equal(enriched.schedules.tr[0].conversion.amountInr, 322.5);
+  assert.equal(enriched.conversionSummary.total, 4);
+  assert.equal(enriched.conversionSummary.matched, 4);
+  assert.equal(enriched.conversionSummary.missing, 0);
+  assert.deepEqual(enriched.conversionSummary.totalsInr, {
+    capitalGains: 13_410,
+    dividends: 1_075,
+    interest: 115,
+    foreignTax: 322.5,
+  });
+  assert.deepEqual(enriched.conversionSummary.completeness, {
+    capitalGains: { total: 1, converted: 1 },
+    dividends: { total: 1, converted: 1 },
+    interest: { total: 1, converted: 1 },
+    foreignTax: { total: 1, converted: 1 },
+  });
+  assert.equal(enriched.conversionSummary.dates, 4);
+  assert.equal(enriched.conversionSummary.dateLedger.length, 4);
+  assert.ok(
+    enriched.validations.some(
+      (validation) => validation.code === "INTEREST_CLASSIFICATION_REVIEW",
+    ),
+  );
+  assert.ok(
+    enriched.validations.some(
+      (validation) => validation.code === "FA_FX_REVIEW_REQUIRED",
+    ),
+  );
+  assert.ok(
+    enriched.validations.some(
+      (validation) => validation.code === "COMMUNITY_RATE_EVIDENCE",
+    ),
+  );
+  assert.equal(
+    enriched.validations.some((validation) => validation.code === "MISSING_FX"),
+    false,
+  );
+});
+
+test("automatic conversion never substitutes a prior business day", () => {
+  const review = {
+    schedules: {
+      capitalGains: [
+        {
+          symbol: "AAPL",
+          date: "2025-09-15",
+          currency: "USD",
+          realizedProfitLoss: 100,
+        },
+      ],
+      fsi: [],
+      tr: [],
+      fa: [],
+    },
+    validations: [],
+  };
+  const rates = parseSbiReferenceRatesCsv(
+    "DATE,TT BUY\n2025-08-29,87.11\n2025-09-01,87.2",
+  );
+
+  const enriched = enrichReviewWithReferenceData(review, {
+    usdTtBuyRates: rates,
+    companyLookup: {},
+  });
+
+  assert.equal(enriched.schedules.capitalGains[0].conversion.specifiedDate, "2025-08-31");
+  assert.equal(enriched.schedules.capitalGains[0].conversion.status, "missing");
+  assert.equal(enriched.schedules.capitalGains[0].conversion.amountInr, null);
+  assert.ok(
+    enriched.validations.some(
+      (validation) => validation.code === "RULE_RATE_EVIDENCE_MISSING",
+    ),
+  );
+});
+
+test("ambiguous exact-date observations remain visible and unconverted", () => {
+  const review = {
+    schedules: {
+      capitalGains: [
+        {
+          symbol: "AAPL",
+          date: "2025-02-15",
+          currency: "USD",
+          realizedProfitLoss: 100,
+        },
+      ],
+      fsi: [],
+      tr: [],
+      fa: [],
+    },
+    validations: [],
+  };
+  const rates = parseSbiReferenceRatesCsv(
+    [
+      "DATE,TT BUY,SOURCE URL",
+      "2025-01-31 09:00,86,https://example.test/morning.pdf",
+      "2025-01-31 15:00,87,https://example.test/afternoon.pdf",
+    ].join("\n"),
+  );
+
+  const enriched = enrichReviewWithReferenceData(review, {
+    usdTtBuyRates: rates,
+    companyLookup: {},
+  });
+  const conversion = enriched.schedules.capitalGains[0].conversion;
+
+  assert.equal(conversion.specifiedDate, "2025-01-31");
+  assert.equal(conversion.status, "ambiguous");
+  assert.equal(conversion.amountInr, null);
+  assert.deepEqual(conversion.observations, [
+    {
+      timestamp: "2025-01-31 09:00",
+      rate: 86,
+      sourceUrl: "https://example.test/morning.pdf",
+    },
+    {
+      timestamp: "2025-01-31 15:00",
+      rate: 87,
+      sourceUrl: "https://example.test/afternoon.pdf",
+    },
+  ]);
+  assert.equal(enriched.conversionSummary.ambiguous, 1);
+  assert.ok(
+    enriched.validations.some(
+      (validation) => validation.code === "RULE_RATE_EVIDENCE_MISSING",
+    ),
+  );
+});
+
 test("checked-in reference snapshots parse to the manifest-backed coverage", async () => {
   const rates = parseSbiReferenceRatesCsv(BUNDLED_SBI_USD_CSV);
   const companies = parseSecCompanyTickersExchange(BUNDLED_SEC_COMPANY_JSON);
