@@ -4,7 +4,11 @@ import {
   parseIbkrStatements,
 } from "./lib/ibkr.js";
 import { buildTaxSummary } from "./lib/tax-summary.js";
-import { csvCell } from "./lib/export.js";
+import {
+  buildScheduleFaA3Csv,
+  csvCell,
+  ScheduleFaA3CsvValidationError,
+} from "./lib/export.js";
 import {
   enrichReviewWithReferenceData,
   parseSbiReferenceRatesCsv,
@@ -60,6 +64,7 @@ const state = {
   review: null,
   reviewConfirmed: false,
   reviewTab: "overview",
+  faA3Metadata: {},
   sourceKind: null,
   rateSourceKind: "bundled-community",
   usdTtBuyRates: BUNDLED_USD_TT_BUY_RATES,
@@ -87,6 +92,9 @@ const elements = {
   reviewContent: document.querySelector("[data-review-content]"),
   reviewHeadline: document.querySelector("[data-review-headline]"),
   reviewStamp: document.querySelector("[data-review-stamp]"),
+  faA3PortalPanel: document.querySelector("[data-fa-a3-portal-panel]"),
+  faA3PortalRows: document.querySelector("[data-fa-a3-portal-rows]"),
+  faA3PortalStatus: document.querySelector("[data-fa-a3-portal-status]"),
   companySummary: document.querySelector("[data-company-summary]"),
   toast: document.querySelector("[data-toast]"),
   validationList: document.querySelector("[data-validation-list]"),
@@ -209,6 +217,10 @@ function invalidateReviewConfirmation() {
   state.reviewConfirmed = false;
 }
 
+function resetScheduleFaA3Metadata() {
+  state.faA3Metadata = {};
+}
+
 function setReviewTab(tabName) {
   const tabs = [...document.querySelectorAll("[data-review-tab]")];
   const requestedTab = tabs.find((tab) => tab.dataset.reviewTab === tabName);
@@ -230,6 +242,7 @@ function discardParsedReviewForFileChange() {
   state.review = null;
   state.sourceKind = null;
   invalidateReviewConfirmation();
+  resetScheduleFaA3Metadata();
   setReviewTab("overview");
   renderReview();
 }
@@ -443,6 +456,7 @@ async function processFiles() {
     });
     state.parsed = parsed;
     state.sourceKind = "user";
+    resetScheduleFaA3Metadata();
     rebuildReviewFromBase();
     setReviewTab("overview");
     renderReview();
@@ -455,6 +469,7 @@ async function processFiles() {
     state.parsed = null;
     state.baseReview = null;
     state.review = null;
+    resetScheduleFaA3Metadata();
     setImportStatus(
       error instanceof Error
         ? `Could not parse these CSVs: ${error.message}`
@@ -476,6 +491,7 @@ function loadDemo() {
   state.sourceKind = "demo";
   state.files = [];
   invalidateReviewConfirmation();
+  resetScheduleFaA3Metadata();
   setReviewTab("overview");
   updateFileList();
   renderReview();
@@ -571,6 +587,263 @@ function renderPreviewTable(rows, columns) {
       ? `<p class="muted preview-limit-note">Showing the first ${MAX_PREVIEW_ROWS} rows; ${escapeHtml(hiddenRows)} more remain in the downloadable exports.</p>`
       : ""
   }`;
+}
+
+function sanitizeScheduleFaA3GroupToken(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/[^a-z0-9_-]/gi, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 96);
+}
+
+function scheduleFaA3SecurityKey(row) {
+  const filingEntityId = sanitizeScheduleFaA3GroupToken(row?.filingEntityId);
+  if (filingEntityId) return `filing-entity-${filingEntityId}`;
+
+  const fallback = [
+    row?.symbol || "UNKNOWN",
+    row?.currency || "",
+    row?.company?.name || "",
+  ]
+    .map(sanitizeScheduleFaA3GroupToken)
+    .filter(Boolean)
+    .join("-");
+  return `display-entity-${fallback || "unknown"}`;
+}
+
+function defaultScheduleFaA3Nature(row) {
+  const asset = String(row?.assetCategory ?? "").toLowerCase();
+  return asset.includes("etf") ? "ETF" : "Equity";
+}
+
+function defaultScheduleFaA3Metadata(row) {
+  return {
+    countryRegionName: "",
+    countryNameAndCode: "",
+    entityName: row?.company?.name || row?.symbol || "",
+    entityAddress: "",
+    zipCode: "",
+    natureOfEntity: defaultScheduleFaA3Nature(row),
+  };
+}
+
+function scheduleFaA3Groups() {
+  const rows = state.review?.schedules?.faA3 ?? [];
+  const groups = new Map();
+  rows.forEach((row) => {
+    const key = scheduleFaA3SecurityKey(row);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        symbol: row.symbol || "Unknown",
+        currency: row.currency || "—",
+        companyName: row.company?.name || row.symbol || "Unmatched",
+        rows: [],
+        sample: row,
+      });
+    }
+    groups.get(key).rows.push(row);
+  });
+  return [...groups.values()];
+}
+
+function ensureScheduleFaA3Metadata(groups = scheduleFaA3Groups()) {
+  const activeKeys = new Set(groups.map((group) => group.key));
+  state.faA3Metadata = Object.fromEntries(
+    Object.entries(state.faA3Metadata).filter(([key]) => activeKeys.has(key)),
+  );
+  groups.forEach((group) => {
+    state.faA3Metadata[group.key] = {
+      ...defaultScheduleFaA3Metadata(group.sample),
+      ...(state.faA3Metadata[group.key] ?? {}),
+    };
+  });
+}
+
+function setScheduleFaA3Status(message, kind = "") {
+  if (!elements.faA3PortalStatus) return;
+  elements.faA3PortalStatus.textContent = message;
+  elements.faA3PortalStatus.className = `inline-status schedule-fa-a3-status${kind ? ` is-${kind}` : ""}`;
+}
+
+function scheduleFaA3MetadataInputId(groupKey, field) {
+  return `fa-a3-${field}-${groupKey.replace(/[^a-z0-9_-]/gi, "-")}`;
+}
+
+function renderScheduleFaA3MetadataInput(group, field, label, options = {}) {
+  const value = state.faA3Metadata[group.key]?.[field] ?? "";
+  const id = scheduleFaA3MetadataInputId(group.key, field);
+  const describedBy = options.help ? `${id}-help` : "";
+  const attrs = [
+    `id="${escapeHtml(id)}"`,
+    `name="${escapeHtml(field)}"`,
+    `value="${escapeHtml(value)}"`,
+    `data-fa-a3-key="${escapeHtml(group.key)}"`,
+    `data-fa-a3-field="${escapeHtml(field)}"`,
+    `autocomplete="off"`,
+  ];
+  if (describedBy) attrs.push(`aria-describedby="${escapeHtml(describedBy)}"`);
+  if (options.maxLength) attrs.push(`maxlength="${escapeHtml(options.maxLength)}"`);
+  if (options.placeholder) attrs.push(`placeholder="${escapeHtml(options.placeholder)}"`);
+  return `
+    <label>
+      <span>${escapeHtml(label)}</span>
+      <input type="text" ${attrs.join(" ")} />
+      ${options.help ? `<small id="${escapeHtml(describedBy)}">${escapeHtml(options.help)}</small>` : ""}
+    </label>`;
+}
+
+function renderScheduleFaA3Portal() {
+  if (!elements.faA3PortalPanel || !elements.faA3PortalRows) return;
+  const groups = scheduleFaA3Groups();
+  ensureScheduleFaA3Metadata(groups);
+  const downloadButton = document.querySelector('[data-export="fa-a3"]');
+
+  if (!state.review) {
+    elements.faA3PortalRows.innerHTML =
+      '<p class="muted">Load a statement or the synthetic demo to prepare portal metadata.</p>';
+    setScheduleFaA3Status("Schedule FA A3 portal CSV will be available after review confirmation.");
+    if (downloadButton) downloadButton.disabled = true;
+    return;
+  }
+
+  if (groups.length === 0) {
+    elements.faA3PortalRows.innerHTML =
+      '<p class="muted">No Schedule FA A3 acquisition-lot rows are available in this review.</p>';
+    setScheduleFaA3Status("No Schedule FA A3 rows are available to export.");
+    if (downloadButton) downloadButton.disabled = true;
+    return;
+  }
+
+  elements.faA3PortalRows.innerHTML = groups
+    .map(
+      (group, index) => `
+        <fieldset class="schedule-fa-a3-record">
+          <legend>
+            <span>${escapeHtml(group.symbol)}</span>
+            <small>${escapeHtml(group.companyName)} · ${escapeHtml(group.currency)} · ${escapeHtml(String(group.rows.length))} lot${group.rows.length === 1 ? "" : "s"}</small>
+          </legend>
+          <div class="schedule-fa-a3-fields">
+            ${renderScheduleFaA3MetadataInput(group, "countryRegionName", "Country/Region name")}
+            ${renderScheduleFaA3MetadataInput(group, "countryNameAndCode", "Country Name and Code", {
+              placeholder: "2-UNITED STATES OF AMERICA",
+            })}
+            ${renderScheduleFaA3MetadataInput(group, "entityName", "Name of entity")}
+            ${renderScheduleFaA3MetadataInput(group, "entityAddress", "Address of entity", {
+              maxLength: 35,
+              help: "Use the portal-ready entity address, shortened to 35 characters only when necessary.",
+            })}
+            ${renderScheduleFaA3MetadataInput(group, "zipCode", "ZIP Code", {
+              maxLength: 8,
+              help: "Portal ZIP Code accepts up to 8 characters.",
+            })}
+            ${renderScheduleFaA3MetadataInput(group, "natureOfEntity", "Nature of entity")}
+          </div>
+          ${index === 0 ? '<p class="muted">Country, address, and ZIP are intentionally blank until you enter portal-ready values.</p>' : ""}
+        </fieldset>`,
+    )
+    .join("");
+  setScheduleFaA3Status(
+    `${groups.length} security metadata record${groups.length === 1 ? "" : "s"} controls ${state.review.schedules.faA3.length} acquisition-lot row${state.review.schedules.faA3.length === 1 ? "" : "s"}.`,
+  );
+  if (downloadButton) downloadButton.disabled = false;
+}
+
+function scheduleFaA3MissingMetadataFields(groups = scheduleFaA3Groups()) {
+  const required = [
+    "countryRegionName",
+    "countryNameAndCode",
+    "entityName",
+    "entityAddress",
+    "zipCode",
+    "natureOfEntity",
+  ];
+  const maxLengths = {
+    entityAddress: 35,
+    zipCode: 8,
+  };
+  return groups.flatMap((group) => {
+    const metadata = state.faA3Metadata[group.key] ?? {};
+    return required.flatMap((field) => {
+      const value = String(metadata[field] ?? "").trim();
+      if (!value) {
+        return [
+          {
+            groupKey: group.key,
+            field,
+            symbol: group.symbol,
+            message: `${field} is required`,
+          },
+        ];
+      }
+      const maxLength = maxLengths[field];
+      if (maxLength && value.length > maxLength) {
+        return [
+          {
+            groupKey: group.key,
+            field,
+            symbol: group.symbol,
+            message: `${field} must be ${maxLength} characters or fewer`,
+          },
+        ];
+      }
+      return [];
+    });
+  });
+}
+
+function clearScheduleFaA3InputErrors() {
+  document.querySelectorAll("[data-fa-a3-field]").forEach((input) => {
+    input.removeAttribute("aria-invalid");
+  });
+}
+
+function findScheduleFaA3MetadataInput(groupKey, field) {
+  return [...document.querySelectorAll("[data-fa-a3-field]")].find(
+    (input) => input.dataset.faA3Key === groupKey && input.dataset.faA3Field === field,
+  );
+}
+
+function markScheduleFaA3MetadataErrors(errors) {
+  clearScheduleFaA3InputErrors();
+  errors.forEach(({ groupKey, field }) => {
+    const input = findScheduleFaA3MetadataInput(groupKey, field);
+    input?.setAttribute("aria-invalid", "true");
+  });
+}
+
+function focusFirstScheduleFaA3Error(errors) {
+  const first = errors[0];
+  if (!first) return;
+  const input = findScheduleFaA3MetadataInput(first.groupKey, first.field);
+  input?.focus({ preventScroll: false });
+}
+
+function scheduleFaA3PortalRows() {
+  const groups = scheduleFaA3Groups();
+  ensureScheduleFaA3Metadata(groups);
+  const metadataByKey = state.faA3Metadata;
+  return (state.review?.schedules?.faA3 ?? []).map((row) => {
+    const metadata = metadataByKey[scheduleFaA3SecurityKey(row)] ?? {};
+    return {
+      countryRegionName: metadata.countryRegionName,
+      countryNameAndCode: metadata.countryNameAndCode,
+      entityName: metadata.entityName,
+      entityAddress: metadata.entityAddress,
+      zipCode: metadata.zipCode,
+      natureOfEntity: metadata.natureOfEntity,
+      acquisitionDate: row.acquisitionDate,
+      initialValueOfInvestment: row.initialValueInr,
+      peakValueOfInvestmentDuringPeriod: row.peakValueInr,
+      closingBalance: row.closingValueInr,
+      totalGrossAmountPaidCreditedWithRespectToHoldingDuringPeriod:
+        row.saleRedemptionProceedsInr,
+      totalGrossProceedsFromSaleOrRedemptionOfInvestmentDuringPeriod:
+        row.saleRedemptionProceedsInr,
+    };
+  });
 }
 
 function formatConversionObservations(observations = []) {
@@ -1501,7 +1774,35 @@ function renderReviewTab() {
   }
 
   if (state.reviewTab === "fa") {
-    elements.reviewContent.innerHTML = renderTable(schedules.fa, [
+    const faA3Rows = schedules.faA3 ?? [];
+    const faA3Preview = faA3Rows.length
+      ? `
+        <div class="reference-table-note">
+          <strong>A3 acquisition-lot preview</strong>
+          <span>Read-only INR evidence that will feed the portal CSV after Step 4 metadata is completed.</span>
+        </div>
+        ${renderPreviewTable(faA3Rows, [
+          { key: "acquisitionDate", label: "Lot date" },
+          { label: "Entity/company", value: (row) => row.company?.name || row.symbol || "Unmatched" },
+          { key: "symbol", label: "Symbol" },
+          { key: "currency", label: "CCY" },
+          { key: "initialValueInr", label: "Initial INR", format: "number" },
+          { key: "initialValueStatus", label: "Initial status" },
+          { key: "peakValueInr", label: "Peak INR", format: "number" },
+          { key: "peakStatus", label: "Peak status" },
+          { key: "closingValueInr", label: "Closing INR", format: "number" },
+          { key: "closingStatus", label: "Closing status" },
+          {
+            label: "Gross paid/credited INR",
+            value: (row) => row.saleRedemptionProceedsInr,
+            format: "number",
+          },
+          { key: "grossAmountStatus", label: "Gross status" },
+          { key: "saleRedemptionProceedsInr", label: "Sale proceeds INR", format: "number" },
+          { key: "saleRedemptionStatus", label: "Sale status" },
+        ])}`
+      : "";
+    elements.reviewContent.innerHTML = `${renderTable(schedules.fa, [
       { key: "assetCategory", label: "Asset class" },
       { key: "symbol", label: "Symbol" },
       { label: "Company", value: (row) => row.company?.name || "Unmatched" },
@@ -1522,7 +1823,7 @@ function renderReviewTab() {
       { key: "grossProceeds", label: "Gross proceeds", format: "number" },
       { key: "grossDividends", label: "Gross dividends", format: "number" },
       { key: "needsFx", label: "FX status" },
-    ]);
+    ])}${faA3Preview}`;
     return;
   }
 
@@ -1611,6 +1912,7 @@ function renderReview() {
   renderReviewHeadline();
   renderReviewTab();
   renderValidations();
+  renderScheduleFaA3Portal();
 }
 
 function downloadBlob(name, type, body) {
@@ -1833,12 +2135,62 @@ function exportCsv() {
   showToast("Combined schedule CSV downloaded locally.");
 }
 
+function exportScheduleFaA3Csv() {
+  if (!ensureExportReady()) return;
+  const groups = scheduleFaA3Groups();
+  ensureScheduleFaA3Metadata(groups);
+  if (groups.length === 0) {
+    setScheduleFaA3Status("No Schedule FA A3 rows are available to export.", "error");
+    showToast("No Schedule FA A3 rows are available to export.");
+    return;
+  }
+
+  const metadataErrors = scheduleFaA3MissingMetadataFields(groups);
+  if (metadataErrors.length > 0) {
+    markScheduleFaA3MetadataErrors(metadataErrors);
+    setScheduleFaA3Status(
+      `${metadataErrors[0].message} for ${metadataErrors[0].symbol}.`,
+      "error",
+    );
+    showToast("Complete the Schedule FA A3 portal metadata before downloading.");
+    focusFirstScheduleFaA3Error(metadataErrors);
+    return;
+  }
+
+  clearScheduleFaA3InputErrors();
+  try {
+    const csv = buildScheduleFaA3Csv(scheduleFaA3PortalRows());
+    downloadBlob(
+      "opentax-ledger-schedule-fa-a3.csv",
+      "text/csv;charset=utf-8",
+      `\uFEFF${csv}`,
+    );
+    setScheduleFaA3Status("Schedule FA A3 portal CSV downloaded locally.", "success");
+    showToast("Schedule FA A3 portal CSV downloaded locally.");
+  } catch (error) {
+    if (error instanceof ScheduleFaA3CsvValidationError) {
+      const first = error.errors[0];
+      setScheduleFaA3Status(
+        first
+          ? `Cannot build A3 CSV: row ${first.row ?? "?"} ${first.field} ${first.code}.`
+          : "Cannot build A3 CSV: missing Schedule FA A3 evidence.",
+        "error",
+      );
+      showToast("Fix missing Schedule FA A3 dates or INR evidence before downloading.");
+      document.querySelector('[data-export="fa-a3"]')?.focus({ preventScroll: false });
+      return;
+    }
+    throw error;
+  }
+}
+
 function resetSession() {
   state.files = [];
   state.parsed = null;
   state.baseReview = null;
   state.review = null;
   invalidateReviewConfirmation();
+  resetScheduleFaA3Metadata();
   state.sourceKind = null;
   state.rateSourceKind = "bundled-community";
   state.usdTtBuyRates = BUNDLED_USD_TT_BUY_RATES;
@@ -1971,9 +2323,24 @@ elements.clearDialog.addEventListener("close", () => {
   if (elements.clearDialog.returnValue === "clear") resetSession();
 });
 
+elements.faA3PortalRows?.addEventListener("input", (event) => {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement)) return;
+  const key = input.dataset.faA3Key;
+  const field = input.dataset.faA3Field;
+  if (!key || !field) return;
+  state.faA3Metadata[key] = {
+    ...(state.faA3Metadata[key] ?? {}),
+    [field]: input.value,
+  };
+  input.removeAttribute("aria-invalid");
+  setScheduleFaA3Status("Schedule FA A3 metadata updated in browser memory.");
+});
+
 document.querySelector('[data-export="report"]').addEventListener("click", exportReport);
 document.querySelector('[data-export="json"]').addEventListener("click", exportJson);
 document.querySelector('[data-export="csv"]').addEventListener("click", exportCsv);
+document.querySelector('[data-export="fa-a3"]').addEventListener("click", exportScheduleFaA3Csv);
 
 updateFileList();
 renderReferenceData();

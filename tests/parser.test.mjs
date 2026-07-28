@@ -119,12 +119,62 @@ test("buildReviewModel returns the browser-friendly review contract", async () =
   assert.equal(review.schedules.fsi.length, 2);
   assert.equal(review.schedules.tr.length, 1);
   assert.equal(review.schedules.fa.length, 1);
+  assert.equal(review.schedules.faA3.length, 1);
+  assert.equal("filingRows" in review.schedules.fa[0], false);
   assert.equal(review.schedules.holdings.length, 1);
   assert.deepEqual(review.source.fileNames, ["statement-1.csv"]);
   assert.equal(review.assumptions.status, "missing");
   assert.equal(review.assumptions.fxRates.length, 0);
   assert.equal("legacySchedules" in review, false);
   assert.equal("findings" in review, false);
+});
+
+test("review exposes sanitized Schedule FA A3 lot rows separately from entity FA", () => {
+  const csv = [
+    "Trades,Header,Asset Category,Currency,Symbol,Date/Time,Quantity,T. Price,Proceeds,Comm/Fee,Basis,Realized P/L,Conid,ISIN",
+    "Trades,Data,STK,USD,ALFA,2025-01-10 09:30:00,2,100,-200,0,200,0,12345,US0000000001",
+    "Trades,Data,STK,USD,ALFA,2025-02-10 09:30:00,1,150,-150,0,150,0,12345,US0000000001",
+    "Trades,Data,STK,USD,ALFA,2025-09-15 09:30:00,-1,130,130,0,-100,30,12345,US0000000001",
+    "Trades,Data,STK,USD,ALFA,2025-11-20 09:30:00,-1.5,150,225,0,-200,25,12345,US0000000001",
+  ].join("\n");
+
+  const review = buildReviewModel(parseIbkrStatements(csv), {
+    assessmentYear: "2026-27",
+  });
+  const serialized = JSON.stringify(review);
+
+  assert.equal(review.schedules.fa.length, 1);
+  assert.equal("filingRows" in review.schedules.fa[0], false);
+  assert.equal(review.schedules.faA3.length, 2);
+  assert.deepEqual(
+    review.schedules.faA3.map((row) => ({
+      symbol: row.symbol,
+      acquisitionDate: row.acquisitionDate,
+      saleRedemptionProceeds: row.saleRedemptionProceeds,
+      saleEvents: row.saleEvents,
+    })),
+    [
+      {
+        symbol: "ALFA",
+        acquisitionDate: "2025-01-10",
+        saleRedemptionProceeds: 280,
+        saleEvents: [
+          { date: "2025-09-15", quantity: 1, proceeds: 130 },
+          { date: "2025-11-20", quantity: 1, proceeds: 150 },
+        ],
+      },
+      {
+        symbol: "ALFA",
+        acquisitionDate: "2025-02-10",
+        saleRedemptionProceeds: 75,
+        saleEvents: [
+          { date: "2025-11-20", quantity: 0.5, proceeds: 75 },
+        ],
+      },
+    ],
+  );
+  assert.doesNotMatch(serialized, /12345|US0000000001/);
+  assert.doesNotMatch(serialized, /"raw"|Date\/Time/);
 });
 
 test("review exchange-rate assumptions exclude raw source rows", () => {

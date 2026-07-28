@@ -519,6 +519,212 @@ test("capital gains convert the net FIFO gain and Schedule FA values retain thei
   );
 });
 
+test("Schedule FA A3 enrichment converts lot values and dated sale events", () => {
+  const enriched = enrichReviewWithReferenceData(
+    {
+      schedules: {
+        capitalGains: [],
+        fsi: [],
+        tr: [],
+        fa: [{ symbol: "ALFA", currency: "USD" }],
+        faA3: [
+          {
+            filingRowId: "ALFA:USD:1",
+            symbol: "ALFA",
+            currency: "USD",
+            acquisitionDate: "2025-01-10",
+            initialValue: 200,
+            grossAmountPaidOrCredited: 200,
+            peakDate: "2025-06-30",
+            peakValue: 260,
+            closingDate: "2025-12-31",
+            closingValue: 0,
+            saleRedemptionProceeds: 205,
+            saleEvents: [
+              { date: "2025-09-15", quantity: 1, proceeds: 130 },
+              { date: "2025-11-20", quantity: 1, proceeds: 75 },
+            ],
+          },
+          {
+            filingRowId: "ALFA:USD:2",
+            symbol: "ALFA",
+            currency: "USD",
+            acquisitionDate: "2025-02-10",
+            initialValue: 150,
+            grossAmountPaidOrCredited: 150,
+            peakDate: "2025-06-30",
+            peakValue: 130,
+            closingDate: "2025-12-31",
+            closingValue: 130,
+            saleRedemptionProceeds: 0,
+            saleEvents: [],
+          },
+        ],
+      },
+      validations: [],
+    },
+    {
+      usdTtBuyRates: parseSbiReferenceRatesCsv(
+        [
+          "DATE,TT BUY",
+          "2025-01-10,80",
+          "2025-02-10,81",
+          "2025-06-30,82",
+          "2025-08-29,83",
+          "2025-10-31,84",
+          "2025-12-31,85",
+        ].join("\n"),
+      ),
+      companyLookup: parseSecCompanyTickersExchange({
+        fields: ["cik", "name", "ticker", "exchange"],
+        data: [[1, "Alfa Inc.", "ALFA", "Nasdaq"]],
+      }),
+    },
+  );
+
+  const [first, second] = enriched.schedules.faA3;
+
+  assert.equal(first.company.name, "Alfa Inc.");
+  assert.equal(first.initialValueInr, 16_000);
+  assert.equal(first.peakValueInr, 21_320);
+  assert.equal(first.closingValueInr, 0);
+  assert.deepEqual(
+    first.saleEvents.map((event) => ({
+      date: event.date,
+      specifiedDate: event.conversion.specifiedDate,
+      proceedsInr: event.proceedsInr,
+    })),
+    [
+      { date: "2025-09-15", specifiedDate: "2025-08-31", proceedsInr: 10_790 },
+      { date: "2025-11-20", specifiedDate: "2025-10-31", proceedsInr: 6_300 },
+    ],
+  );
+  assert.equal(first.saleRedemptionProceedsInr, 17_090);
+  assert.equal(first.grossAmountPaidOrCreditedInr, first.saleRedemptionProceedsInr);
+  assert.equal(first.valueConversions.grossAmountPaidOrCredited.status, "matched");
+  assert.equal(first.valueConversions.grossAmountPaidOrCredited.selection, "sale-events");
+  assert.equal(first.valueConversions.grossAmountPaidOrCredited.amountInr, 17_090);
+  assert.deepEqual(
+    first.valueConversions.grossAmountPaidOrCredited.saleEventConversions.map(
+      (conversion) => conversion.specifiedDate,
+    ),
+    ["2025-08-31", "2025-10-31"],
+  );
+  assert.equal(second.saleRedemptionProceeds, 0);
+  assert.equal(second.saleRedemptionProceedsInr, 0);
+  assert.equal(second.grossAmountPaidOrCreditedInr, 0);
+  assert.equal(second.valueConversions.grossAmountPaidOrCredited.status, "not-required");
+  assert.equal(second.closingValueInr, 11_050);
+  assert.ok(enriched.faConversionSummary.rows >= 12);
+});
+
+test("Schedule FA A3 value conversion gaps surface in the validation register", () => {
+  const enriched = enrichReviewWithReferenceData(
+    {
+      schedules: {
+        capitalGains: [],
+        fsi: [],
+        tr: [],
+        fa: [],
+        faA3: [
+          {
+            filingRowId: "ALFA:USD:1",
+            symbol: "ALFA",
+            currency: "USD",
+            acquisitionDate: "2025-01-10",
+            initialValue: null,
+            grossAmountPaidOrCredited: 200,
+            peakDate: "2025-06-30",
+            peakValue: 260,
+            closingDate: "2025-12-31",
+            closingValue: 0,
+            saleRedemptionProceeds: 0,
+            saleEvents: [],
+          },
+        ],
+      },
+      validations: [],
+    },
+    {
+      usdTtBuyRates: parseSbiReferenceRatesCsv(
+        [
+          "DATE,TT BUY",
+          "2025-01-10,80",
+          "2025-06-30,82",
+          "2025-12-31,85",
+        ].join("\n"),
+      ),
+      companyLookup: {},
+    },
+  );
+
+  assert.equal(
+    enriched.schedules.faA3[0].valueConversions.initial.status,
+    "missing-value",
+  );
+  assert.equal(enriched.schedules.faA3[0].initialValueInr, null);
+  assert.ok(
+    enriched.validations.some(
+      (validation) => validation.code === "FA_FX_REVIEW_REQUIRED",
+    ),
+  );
+});
+
+test("Schedule FA A3 sale-event conversion gaps surface in the validation register", () => {
+  const enriched = enrichReviewWithReferenceData(
+    {
+      schedules: {
+        capitalGains: [],
+        fsi: [],
+        tr: [],
+        fa: [],
+        faA3: [
+          {
+            filingRowId: "ALFA:USD:1",
+            symbol: "ALFA",
+            currency: "USD",
+            acquisitionDate: "2025-01-10",
+            initialValue: 200,
+            grossAmountPaidOrCredited: 200,
+            peakDate: "2025-06-30",
+            peakValue: 260,
+            closingDate: "2025-12-31",
+            closingValue: 0,
+            saleRedemptionProceeds: 205,
+            saleEvents: [{ date: "2025-09-15", quantity: 1, proceeds: 205 }],
+          },
+        ],
+      },
+      validations: [],
+    },
+    {
+      usdTtBuyRates: parseSbiReferenceRatesCsv(
+        [
+          "DATE,TT BUY",
+          "2025-01-10,80",
+          "2025-06-30,82",
+          "2025-12-31,85",
+        ].join("\n"),
+      ),
+      companyLookup: {},
+    },
+  );
+
+  assert.equal(enriched.schedules.faA3[0].saleEvents[0].conversion.status, "missing");
+  assert.equal(enriched.schedules.faA3[0].saleEvents[0].proceedsInr, null);
+  assert.equal(enriched.schedules.faA3[0].saleRedemptionProceedsInr, null);
+  assert.equal(enriched.schedules.faA3[0].grossAmountPaidOrCreditedInr, null);
+  assert.equal(
+    enriched.schedules.faA3[0].valueConversions.grossAmountPaidOrCredited.status,
+    "missing",
+  );
+  assert.ok(
+    enriched.validations.some(
+      (validation) => validation.code === "FA_FX_REVIEW_REQUIRED",
+    ),
+  );
+});
+
 test("missing Schedule FA source values remain missing instead of becoming zero", () => {
   const enriched = enrichReviewWithReferenceData(
     {

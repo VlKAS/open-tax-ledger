@@ -43,6 +43,8 @@ Aadhaar, connect to the Income Tax Department portal, or file a return.
 - 🧭 Adds an Audit tab with source/output row reconciliation, methodology,
   assumptions, provenance, and validation severity.
 - 👀 Requires a schedule-and-audit preview before local downloads.
+- 🧩 Builds a Schedule FA A3 portal CSV after review, with portal metadata
+  entered once per security and lot-level INR rows generated locally.
 - 🏢 Enriches supported tickers with offline SEC EDGAR company, CIK, ticker, and
   exchange metadata.
 - 🔒 Processes taxpayer CSV files locally in the browser.
@@ -57,6 +59,8 @@ Supported now:
   cash movements, securities transfers, and optional exchange-rate sections
   recognized by the current parser.
 - Browser-only import, review, and export.
+- Schedule FA A3 portal CSV preparation for supported securities, subject to
+  manual portal validation and CA review.
 - Synthetic fixtures only in the repository and test suite.
 - Static deployment through the checked-in GitHub Pages workflow.
 
@@ -86,10 +90,56 @@ Not supported yet:
    or Rule 128 prescribed date visible; if the community archive has no row on
    that date, it may use the latest published observation on or before that date
    within the configured review window and marks that evidence status.
-7. Export draft schedules and reconciliation checks.
-8. Share the exported working papers with a CA.
-9. Enter final CA-approved values in the official Income Tax Department utility
-   or portal.
+7. If you need Schedule FA A3 portal import, complete the entity metadata in
+   Step 4 and download the portal CSV after the review gate is satisfied.
+8. Export draft schedules and reconciliation checks.
+9. Share the exported working papers with a CA.
+10. Enter or import final CA-approved values in the official Income Tax
+    Department utility or portal.
+
+## 🧩 Schedule FA A3 Portal CSV
+
+The Schedule FA A3 CSV is a browser-local import aid for the official Income Tax
+Department portal. It is not an ITR JSON file, does not connect to the portal,
+and does not file anything automatically.
+
+Workflow:
+
+1. Import the IBKR Activity Statement CSV and complete the review preview first.
+   Downloads stay locked until you confirm the generated schedules and audit
+   checks.
+2. In Step 4, fill portal-ready metadata once per security:
+   `Country/Region name`, `Country Name and Code`, `Name of entity`,
+   `Address of entity`, `ZIP Code`, and `Nature of entity`.
+3. Keep the address and ZIP fields aligned with the portal's current limits:
+   address line up to 35 characters and ZIP Code up to 8 characters. Use the
+   portal-ready entity address and shorten it only when the portal limit
+   requires it.
+4. Download `opentax-ledger-schedule-fa-a3.csv`. The file is generated locally
+   from browser memory and is not uploaded by OpenTax Ledger.
+
+The CSV creates one row per Schedule FA A3 acquisition lot. Each row carries the
+lot acquisition date, initial value, peak value, closing balance, gross
+paid/credited amount, and sale/redemption proceeds in INR.
+
+For the two portal period-amount columns, OpenTax Ledger follows the current
+review decision: the lot's Sold value is used for both
+`Total gross amount paid/credited with respect to the holding during the period`
+and
+`Total gross proceeds from sale or redemption of investment during the period`.
+Fully unsold lots export `0` for those sold-value fields.
+
+Portal import steps:
+
+1. Sign in to <https://www.incometax.gov.in/>.
+2. Open the relevant ITR, go to **Schedule FA**, and choose table **A3**.
+3. Use the portal's CSV import option for A3 and upload the downloaded CSV.
+4. Review every imported row in the portal before saving. Correct country
+   labels, address truncation, ZIP handling, entity nature, INR values, and any
+   portal-side validation messages manually.
+
+Always verify the imported rows against IBKR statements, exchange-rate evidence,
+and CA-approved positions before filing. This project is not tax advice.
 
 ## 🧪 Quick Start For Developers
 

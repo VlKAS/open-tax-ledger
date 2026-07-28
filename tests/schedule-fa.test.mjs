@@ -383,6 +383,380 @@ test("excludes acquisition lots fully disposed before the Schedule FA calendar y
   assert.equal(result.entities[0].evidence.buyRows, 1);
 });
 
+test("derives Schedule FA filing rows one per acquisition lot overlapping the calendar year", () => {
+  const result = deriveScheduleFa({
+    assessmentYear: "2026-27",
+    trades: [
+      trade({
+        date: "2024-10-01",
+        quantity: 2,
+        proceeds: -200,
+        basis: 200,
+        source: { fileIndex: 0, rowNumber: 1 },
+      }),
+      trade({
+        date: "2025-02-01",
+        quantity: 1,
+        proceeds: -150,
+        basis: 150,
+        source: { fileIndex: 0, rowNumber: 2 },
+      }),
+      trade({
+        date: "2025-09-01",
+        quantity: -2,
+        proceeds: 420,
+        basis: -250,
+        source: { fileIndex: 0, rowNumber: 3 },
+      }),
+    ],
+    openPositions: [
+      position({
+        snapshotDate: "2025-06-30",
+        quantity: 3,
+        value: 390,
+      }),
+      position({
+        snapshotDate: "2025-12-31",
+        quantity: 1,
+        value: 180,
+      }),
+    ],
+  });
+
+  const entity = result.entities[0];
+
+  assert.equal(result.audit.filingRowCount, 2);
+  assert.equal(entity.initialValue, 350);
+  assert.equal(entity.evidence.buyRows, 2);
+  assert.deepEqual(
+    entity.filingRows.map((row) => ({
+      acquisitionDate: row.acquisitionDate,
+      quantity: row.quantity,
+      initialValue: row.initialValue,
+      grossAmountPaidOrCredited: row.grossAmountPaidOrCredited,
+      saleRedemptionProceeds: row.saleRedemptionProceeds,
+      soldQuantity: row.soldQuantity,
+      closingValue: row.closingValue,
+      closingStatus: row.closingStatus,
+    })),
+    [
+      {
+        acquisitionDate: "2024-10-01",
+        quantity: 2,
+        initialValue: 200,
+        grossAmountPaidOrCredited: 420,
+        saleRedemptionProceeds: 420,
+        soldQuantity: 2,
+        closingValue: 0,
+        closingStatus: "exact-period-end-allocation",
+      },
+      {
+        acquisitionDate: "2025-02-01",
+        quantity: 1,
+        initialValue: 150,
+        grossAmountPaidOrCredited: 0,
+        saleRedemptionProceeds: 0,
+        soldQuantity: 0,
+        closingValue: 180,
+        closingStatus: "exact-period-end-allocation",
+      },
+    ],
+  );
+  assert.deepEqual(result.filingRows, entity.filingRows);
+});
+
+test("Schedule FA filing rows keep dated sale proceeds events per lot", () => {
+  const result = deriveScheduleFa({
+    assessmentYear: "2026-27",
+    trades: [
+      trade({
+        date: "2025-01-10",
+        quantity: 2,
+        proceeds: -200,
+        basis: 200,
+        source: { fileIndex: 0, rowNumber: 1 },
+      }),
+      trade({
+        date: "2025-02-10",
+        quantity: 1,
+        proceeds: -150,
+        basis: 150,
+        source: { fileIndex: 0, rowNumber: 2 },
+      }),
+      trade({
+        date: "2025-09-15",
+        quantity: -1,
+        proceeds: 130,
+        basis: -100,
+        source: { fileIndex: 0, rowNumber: 3 },
+      }),
+      trade({
+        date: "2025-11-20",
+        quantity: -1.5,
+        proceeds: 225,
+        basis: -200,
+        source: { fileIndex: 0, rowNumber: 4 },
+      }),
+    ],
+  });
+
+  assert.deepEqual(
+    result.filingRows.map((row) => ({
+      acquisitionDate: row.acquisitionDate,
+      saleRedemptionProceeds: row.saleRedemptionProceeds,
+      saleEvents: row.saleEvents,
+    })),
+    [
+      {
+        acquisitionDate: "2025-01-10",
+        saleRedemptionProceeds: 280,
+        saleEvents: [
+          { date: "2025-09-15", quantity: 1, proceeds: 130 },
+          { date: "2025-11-20", quantity: 1, proceeds: 150 },
+        ],
+      },
+      {
+        acquisitionDate: "2025-02-10",
+        saleRedemptionProceeds: 75,
+        saleEvents: [
+          { date: "2025-11-20", quantity: 0.5, proceeds: 75 },
+        ],
+      },
+    ],
+  );
+});
+
+test("Schedule FA filing rows include only prior lots still open in the calendar year", () => {
+  const result = deriveScheduleFa({
+    assessmentYear: "2026-27",
+    trades: [
+      trade({
+        date: "2024-01-01",
+        quantity: 2,
+        proceeds: -200,
+        basis: 200,
+        source: { fileIndex: 0, rowNumber: 1 },
+      }),
+      trade({
+        date: "2024-06-01",
+        quantity: -1,
+        proceeds: 120,
+        basis: -100,
+        source: { fileIndex: 0, rowNumber: 2 },
+      }),
+      trade({
+        date: "2025-09-01",
+        quantity: -1,
+        proceeds: 130,
+        basis: -100,
+        source: { fileIndex: 0, rowNumber: 3 },
+      }),
+    ],
+  });
+
+  assert.equal(result.filingRows.length, 1);
+  assert.equal(result.filingRows[0].acquisitionDate, "2024-01-01");
+  assert.equal(result.filingRows[0].quantity, 1);
+  assert.equal(result.filingRows[0].initialValue, 100);
+  assert.equal(result.filingRows[0].saleRedemptionProceeds, 130);
+  assert.equal(result.filingRows[0].initialValueStatus, "review-acquisition-basis");
+});
+
+test("Schedule FA filing rows retain passive and dividend-only entities for manual review", () => {
+  const result = deriveScheduleFa({
+    assessmentYear: "2026-27",
+    openPositions: [
+      position({
+        symbol: "PASSIVE",
+        snapshotDate: "2026-03-31",
+        quantity: 1,
+        value: 125,
+      }),
+    ],
+    dividends: [
+      {
+        symbol: "ONLYDIV",
+        currency: "USD",
+        date: "2025-08-01",
+        description: "Synthetic issuer dividend",
+        amount: 12.34,
+      },
+    ],
+  });
+
+  assert.equal(result.entities.length, 2);
+  assert.equal(result.filingRows.length, 2);
+  assert.equal(result.audit.filingRowCount, 2);
+  assert.deepEqual(
+    result.filingRows.map((row) => ({
+      symbol: row.symbol,
+      acquisitionDate: row.acquisitionDate,
+      acquisitionStatus: row.acquisitionStatus,
+      initialValue: row.initialValue,
+      closingStatus: row.closingStatus,
+      buyRows: row.evidence.buyRows,
+    })),
+    [
+      {
+        symbol: "ONLYDIV",
+        acquisitionDate: "",
+        acquisitionStatus: "missing-evidence",
+        initialValue: null,
+        closingStatus: "missing-evidence",
+        buyRows: 0,
+      },
+      {
+        symbol: "PASSIVE",
+        acquisitionDate: "",
+        acquisitionStatus: "missing-evidence",
+        initialValue: null,
+        closingStatus: "missing-evidence",
+        buyRows: 0,
+      },
+    ],
+  );
+});
+
+test("Schedule FA filing row IDs do not expose or collide on stable security identifiers", () => {
+  const result = deriveScheduleFa({
+    assessmentYear: "2026-27",
+    openPositions: [
+      position({
+        symbol: "DUP",
+        conid: "111",
+        snapshotDate: "2026-03-31",
+        quantity: 1,
+        value: 100,
+      }),
+      position({
+        symbol: "DUP",
+        conid: "222",
+        snapshotDate: "2026-03-31",
+        quantity: 1,
+        value: 200,
+      }),
+    ],
+  });
+
+  assert.equal(result.filingRows.length, 2);
+  assert.equal(
+    new Set(result.filingRows.map((row) => row.filingEntityId)).size,
+    2,
+  );
+  assert.equal(
+    new Set(result.filingRows.map((row) => row.filingRowId)).size,
+    2,
+  );
+  assert.doesNotMatch(JSON.stringify(result.filingRows), /111|222|conid/i);
+});
+
+test("Schedule FA filing rows do not infer zero closing values without reliable year-end coverage", () => {
+  const priorSnapshot = deriveScheduleFa({
+    assessmentYear: "2026-27",
+    trades: [
+      trade({
+        date: "2025-01-01",
+        quantity: 1,
+        proceeds: -100,
+        basis: 100,
+      }),
+      trade({
+        date: "2025-07-01",
+        quantity: -1,
+        proceeds: 120,
+        basis: -100,
+      }),
+    ],
+    openPositions: [
+      position({
+        snapshotDate: "2025-06-30",
+        quantity: 1,
+        value: 100,
+      }),
+    ],
+  });
+
+  assert.equal(priorSnapshot.filingRows[0].closingValue, 100);
+  assert.equal(priorSnapshot.filingRows[0].closingQuantity, 1);
+  assert.equal(
+    priorSnapshot.filingRows[0].closingStatus,
+    "nearest-prior-snapshot-allocation",
+  );
+
+  const inconsistentOversale = deriveScheduleFa({
+    assessmentYear: "2026-27",
+    trades: [
+      trade({
+        date: "2025-01-01",
+        quantity: 1,
+        proceeds: -100,
+        basis: 100,
+      }),
+      trade({
+        date: "2025-07-01",
+        quantity: -2,
+        proceeds: 240,
+        basis: -200,
+      }),
+    ],
+    openPositions: [
+      position({
+        symbol: "MSFT",
+        snapshotDate: "2025-12-31",
+        quantity: 1,
+        value: 300,
+      }),
+    ],
+  });
+  const oversold = inconsistentOversale.filingRows.find(
+    (row) => row.symbol === "AAPL",
+  );
+
+  assert.equal(oversold.closingValue, null);
+  assert.equal(oversold.closingQuantity, null);
+  assert.equal(oversold.closingStatus, "missing-evidence");
+  assert.equal(oversold.evidence.unmatchedSale, true);
+});
+
+test("Schedule FA filing rows block allocations when imported lots do not reconcile to a position", () => {
+  const result = deriveScheduleFa({
+    assessmentYear: "2026-27",
+    trades: [
+      trade({
+        date: "2025-01-01",
+        quantity: 2,
+        proceeds: -200,
+        basis: 200,
+      }),
+    ],
+    openPositions: [
+      position({
+        snapshotDate: "2025-12-31",
+        quantity: 1,
+        value: 100,
+      }),
+    ],
+  });
+
+  assert.equal(result.filingRows.length, 1);
+  assert.equal(result.filingRows[0].peakValue, null);
+  assert.equal(
+    result.filingRows[0].peakStatus,
+    "position-lot-mismatch-review",
+  );
+  assert.equal(result.filingRows[0].closingValue, null);
+  assert.equal(result.filingRows[0].closingQuantity, null);
+  assert.equal(
+    result.filingRows[0].closingStatus,
+    "position-lot-mismatch-review",
+  );
+  assert.ok(
+    result.findings.some(
+      (item) => item.code === "FA_A3_POSITION_LOT_MISMATCH",
+    ),
+  );
+});
+
 test("keeps passive holdings distinct when stable IDs share a display symbol", () => {
   const result = deriveScheduleFa({
     assessmentYear: "2026-27",

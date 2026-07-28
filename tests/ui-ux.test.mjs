@@ -50,6 +50,47 @@ test("review explains parity-sensitive tax and audit counts", () => {
   assert.match(app, /Expected FIFO split/);
 });
 
+test("Schedule FA A3 portal export is gated by metadata and exact row evidence", () => {
+  assert.match(html, /Schedule FA A3 portal CSV/);
+  assert.match(html, /data-fa-a3-portal-status/);
+  assert.match(html, /data-export="fa-a3"/);
+  assert.match(app, /buildScheduleFaA3Csv/);
+  assert.match(app, /ScheduleFaA3CsvValidationError/);
+  assert.match(app, /state\.faA3Metadata = \{\}/);
+  assert.match(app, /countryNameAndCode/);
+  assert.match(app, /2-UNITED STATES OF AMERICA/);
+  assert.match(app, /row\?\.filingEntityId/);
+  assert.match(app, /filing-entity-/);
+  assert.match(app, /display-entity-/);
+  assert.doesNotMatch(app, /row\?\.company\?\.cik \|\| ""/);
+  assert.match(app, /maxLength:\s*35/);
+  assert.match(
+    app,
+    /Use the portal-ready entity address, shortened to 35 characters only when necessary\./,
+  );
+  assert.match(app, /maxLength:\s*8/);
+  assert.match(app, /Portal ZIP Code accepts up to 8 characters\./);
+  assert.match(app, /zipCode:\s*8/);
+  assert.match(
+    app,
+    /totalGrossAmountPaidCreditedWithRespectToHoldingDuringPeriod:\s*row\.saleRedemptionProceedsInr/,
+  );
+  assert.match(app, /row\.saleRedemptionProceedsInr/);
+  assert.match(app, /opentax-ledger-schedule-fa-a3\.csv/);
+  assert.match(app, /aria-invalid/);
+  assert.match(app, /focus\(\{ preventScroll: false \}\)/);
+});
+
+test("Schedule FA review includes a compact A3 acquisition-lot preview", () => {
+  assert.match(app, /const faA3Rows = schedules\.faA3 \?\? \[\]/);
+  assert.match(app, /A3 acquisition-lot preview/);
+  assert.match(app, /Lot date/);
+  assert.match(app, /Gross paid\/credited INR/);
+  assert.match(app, /value:\s*\(row\) => row\.saleRedemptionProceedsInr/);
+  assert.match(app, /Sale proceeds INR/);
+  assert.match(app, /renderPreviewTable\(faA3Rows/);
+});
+
 test("audit details use native disclosure controls", () => {
   assert.match(app, /<details class="audit-section-card audit-disclosure">/);
   assert.match(app, /<summary>/);
@@ -66,6 +107,11 @@ test("review controls retain touch targets and narrow-screen stacking", () => {
   assert.match(
     styles,
     /@media \(max-width: 680px\)[\s\S]*?\.audit-disclosure summary\s*\{[^}]*flex-direction:\s*column;/,
+  );
+  assert.match(styles, /\.schedule-fa-a3-fields input\s*\{[^}]*min-height:\s*44px;/s);
+  assert.match(
+    styles,
+    /@media \(max-width: 680px\)[\s\S]*?\.schedule-fa-a3-fields\s*\{[^}]*grid-template-columns:\s*1fr;/,
   );
 });
 

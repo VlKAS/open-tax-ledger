@@ -46,6 +46,9 @@ test("server renders the complete privacy-first product", async () => {
   assert.match(html, /FTC candidate/);
   assert.match(html, /data-action="confirm-review"/);
   assert.match(html, /I reviewed this preview · continue to downloads/);
+  assert.match(html, /Schedule FA A3 portal CSV/);
+  assert.match(html, /data-fa-a3-portal-status/);
+  assert.match(html, /data-export="fa-a3"/);
   assert.doesNotMatch(html, /data-rate-lookup-date|data-action="lookup-rate"/);
   assert.match(html, /Not tax advice/i);
   assert.match(html, /SBI FX RateKeeper community archive/i);
@@ -92,6 +95,20 @@ test("static client assets are safe under a GitHub Pages project subpath", async
   assert.match(app, /matched rows/);
   assert.match(app, /distinct statutory dates/);
   assert.match(app, /function renderAuditTab/);
+  assert.match(app, /function renderScheduleFaA3Portal/);
+  assert.match(app, /A3 acquisition-lot preview/);
+  assert.match(app, /state\.review\?\.schedules\?\.faA3 \?\? \[\]/);
+  assert.match(app, /row\?\.filingEntityId/);
+  assert.match(app, /display-entity-/);
+  assert.match(app, /maxLength:\s*8/);
+  assert.match(app, /zipCode:\s*8/);
+  assert.match(
+    app,
+    /totalGrossAmountPaidCreditedWithRespectToHoldingDuringPeriod:\s*row\.saleRedemptionProceedsInr/,
+  );
+  assert.match(app, /value:\s*\(row\) => row\.saleRedemptionProceedsInr/);
+  assert.match(app, /buildScheduleFaA3Csv\(scheduleFaA3PortalRows\(\)\)/);
+  assert.match(app, /opentax-ledger-schedule-fa-a3\.csv/);
   assert.match(app, /Data rows received/);
   assert.match(app, /Source-to-output row checks/);
   assert.match(app, /FIFO lot matching is applied/);
