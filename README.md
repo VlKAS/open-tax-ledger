@@ -37,6 +37,10 @@ Aadhaar, connect to the Income Tax Department portal, or file a return.
 - 🗓️ Derives supported Rule 115 and Rule 128 calendar dates automatically.
 - 🏦 Uses a pinned community USD TT BUY table for exact-date INR previews without
   silently shifting weekends or holidays.
+- 📊 Summarizes draft gains, foreign income, foreign tax, FTC candidates, and
+  holdings while keeping unsupported STCG/LTCG classification visibly unresolved.
+- 🧭 Adds an Audit tab with source/output row reconciliation, methodology,
+  assumptions, provenance, and validation severity.
 - 👀 Requires a schedule-and-audit preview before local downloads.
 - 🏢 Enriches supported tickers with offline SEC EDGAR company, CIK, ticker, and
   exchange metadata.
@@ -72,8 +76,9 @@ Not supported yet:
 3. Import the CSV in the browser.
 4. Confirm filing assumptions. The app derives supported Rule 115 specified
    dates and Rule 128 foreign-tax dates automatically.
-5. Review the INR preview, per-row date rule, exact TT BUY match, and unresolved
-   checks before downloads are enabled.
+5. Review the headline summary, per-row INR preview, exact TT BUY match, and
+   unresolved checks. Use the Audit tab to reconcile accepted source rows
+   against generated CG, FSI, TR, and FA working-paper rows.
 6. Retain primary SBI evidence for material dates. The app does not apply a
    prior-business-day fallback when the exact date is unavailable.
 7. Export draft schedules and reconciliation checks.

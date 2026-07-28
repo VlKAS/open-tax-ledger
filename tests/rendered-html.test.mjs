@@ -36,6 +36,10 @@ test("server renders the complete privacy-first product", async () => {
   assert.match(html, /Export/);
   assert.match(html, /Automatic Rule 115 date summary/);
   assert.match(html, /no\s+prior-business-day shift is applied/i);
+  assert.match(html, /data-review-tab="audit"/);
+  assert.match(html, /aria-controls="review-tab-panel"/);
+  assert.match(html, /role="tabpanel"/);
+  assert.match(html, /FTC candidate/);
   assert.match(html, /data-action="confirm-review"/);
   assert.match(html, /I reviewed this preview · continue to downloads/);
   assert.doesNotMatch(html, /data-rate-lookup-date|data-action="lookup-rate"/);
@@ -74,6 +78,11 @@ test("static client assets are safe under a GitHub Pages project subpath", async
   assert.match(app, /discardParsedReviewForFileChange/);
   assert.match(app, /MAX_PREVIEW_ROWS = 200/);
   assert.match(app, /conversionCandidateObservations/);
+  assert.match(app, /function renderAuditTab/);
+  assert.match(app, /Data rows received/);
+  assert.match(app, /Source-to-output row checks/);
+  assert.match(app, /Holding period and lot matching not inferred/);
+  assert.match(app, /event\.key === "ArrowRight"/);
   assert.match(referenceData, /exactDateOnly:\s*true/);
   assert.match(rule115, /lastDayOfPreviousMonth/);
   assert.match(rule115, /indianFinancialYearEnd/);

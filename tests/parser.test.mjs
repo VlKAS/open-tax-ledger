@@ -57,7 +57,13 @@ test("buildReviewModel returns the browser-friendly review contract", async () =
 
   assert.deepEqual(Object.keys(review.summary), [
     "files",
+    "dataRowsReceived",
+    "dataRowsAccepted",
+    "sections",
     "trades",
+    "buyTrades",
+    "saleTrades",
+    "instruments",
     "positions",
     "dividends",
     "withholding",
@@ -66,7 +72,13 @@ test("buildReviewModel returns the browser-friendly review contract", async () =
     "duplicateRowsSuppressed",
   ]);
   assert.equal(review.summary.files, 1);
+  assert.equal(review.summary.dataRowsReceived, 13);
+  assert.equal(review.summary.dataRowsAccepted, 12);
+  assert.equal(review.summary.sections, 8);
   assert.equal(review.summary.trades, 3);
+  assert.equal(review.summary.buyTrades, 2);
+  assert.equal(review.summary.saleTrades, 1);
+  assert.equal(review.summary.instruments, 2);
   assert.equal(review.summary.duplicateRowsSuppressed, 1);
   assert.equal(review.schedules.capitalGains.length, 1);
   assert.equal(review.schedules.capitalGains[0].quantitySold, 5);

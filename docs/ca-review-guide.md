@@ -34,18 +34,23 @@ Expected draft outputs:
    year being prepared.
 2. Confirm the statement account IDs and taxpayer-provided ownership details.
 3. Review unsupported instruments and excluded rows.
-4. Review realized gains, acquisition dates, disposal dates, quantities, and
-   source-row traceability.
-5. Review dividend rows and withholding tax linkage.
-6. Review the automatically derived Rule 115 specified dates and Rule 128
+4. Use the Audit tab to reconcile accepted source rows, duplicate suppression,
+   generated CG/FSI/TR/FA rows, conversion coverage, and validation severity.
+5. Review realized gains, acquisition dates, disposal dates, quantities, and
+   source-row traceability. STCG/LTCG classification and lot matching are not
+   inferred by the app.
+6. Review dividend rows and withholding tax linkage. Treat the displayed FTC
+   amount as a candidate ceiling only; eligibility and per-country relief caps
+   are not computed.
+7. Review the automatically derived Rule 115 specified dates and Rule 128
    foreign-tax dates, confirm the income classification and event date, and
    retain primary SBI evidence. Do not treat a broker FX rate, a prior-day
    fallback, or the bundled community table alone as final support.
-7. Compare foreign income and tax relief working papers against AIS/TIS/Form
+8. Compare foreign income and tax relief working papers against AIS/TIS/Form
    26AS and broker reports.
-8. Review Schedule FA asset/account disclosures against year-end and peak-value
+9. Review Schedule FA asset/account disclosures against year-end and peak-value
    evidence required for the applicable ITR utility.
-9. Enter final reviewed values into the official utility or portal.
+10. Enter final reviewed values into the official utility or portal.
 
 Official ITR utilities are published by the Income Tax Department:
 <https://www.incometax.gov.in/iec/foportal/downloads/income-tax-returns>.

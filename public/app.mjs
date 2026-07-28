@@ -60,6 +60,7 @@ const elements = {
   rateSummary: document.querySelector("[data-rate-summary]"),
   rateTableBody: document.querySelector("[data-rate-table-body]"),
   reviewContent: document.querySelector("[data-review-content]"),
+  reviewHeadline: document.querySelector("[data-review-headline]"),
   reviewStamp: document.querySelector("[data-review-stamp]"),
   companySummary: document.querySelector("[data-company-summary]"),
   toast: document.querySelector("[data-toast]"),
@@ -79,10 +80,7 @@ function selectStep(step) {
     showToast("Load statements or the synthetic demo before exporting.");
     step = "import";
   } else if (step === "export" && !state.reviewConfirmed) {
-    state.reviewTab = "overview";
-    document.querySelectorAll("[data-review-tab]").forEach((button) => {
-      button.setAttribute("aria-selected", String(button.dataset.reviewTab === "overview"));
-    });
+    setReviewTab("overview");
     state.currentStep = "review";
     showToast("Review the converted schedules before downloading.");
     step = "review";
@@ -149,14 +147,26 @@ function invalidateReviewConfirmation() {
   state.reviewConfirmed = false;
 }
 
+function setReviewTab(tabName) {
+  const tabs = [...document.querySelectorAll("[data-review-tab]")];
+  const requestedTab = tabs.find((tab) => tab.dataset.reviewTab === tabName);
+  const selectedTab = requestedTab ?? tabs.find((tab) => tab.dataset.reviewTab === "overview");
+  if (!selectedTab) return;
+
+  state.reviewTab = selectedTab.dataset.reviewTab;
+  tabs.forEach((tab) => {
+    const selected = tab === selectedTab;
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  });
+  elements.reviewContent?.setAttribute("aria-labelledby", selectedTab.id);
+}
+
 function discardParsedReviewForFileChange() {
   state.review = null;
   state.sourceKind = null;
-  state.reviewTab = "overview";
   invalidateReviewConfirmation();
-  document.querySelectorAll("[data-review-tab]").forEach((button) => {
-    button.setAttribute("aria-selected", String(button.dataset.reviewTab === "overview"));
-  });
+  setReviewTab("overview");
   renderReview();
 }
 
@@ -371,6 +381,7 @@ async function processFiles() {
     state.review = withReferenceData(buildReviewModel(parsed));
     invalidateReviewConfirmation();
     state.sourceKind = "user";
+    setReviewTab("overview");
     renderReview();
     setImportStatus(
       `Parsed ${state.review.summary.trades} trades, ${state.review.summary.dividends} dividends, and ${state.review.summary.positions} positions.`,
@@ -396,6 +407,7 @@ function loadDemo() {
   invalidateReviewConfirmation();
   state.sourceKind = "demo";
   state.files = [];
+  setReviewTab("overview");
   updateFileList();
   renderReview();
   setImportStatus("Synthetic demo loaded. No personal data is present.", "success");
@@ -640,9 +652,444 @@ function getConversionSummary() {
   return state.review?.conversionSummary ?? fallbackConversionSummary();
 }
 
-function completenessLabel(value) {
-  if (!value || !value.total) return "No rows";
-  return `${value.converted}/${value.total} rows`;
+function convertedInrMetric(conversionSummary, key) {
+  const completeness = conversionSummary.completeness?.[key] ?? {
+    total: 0,
+    converted: 0,
+  };
+  if (!completeness.total) {
+    return {
+      value: "₹0",
+      note: "No mapped rows",
+      complete: true,
+      empty: true,
+    };
+  }
+  if (completeness.converted !== completeness.total) {
+    return {
+      value: "Rate needed",
+      note: `${completeness.converted}/${completeness.total} rows converted`,
+      complete: false,
+      empty: false,
+    };
+  }
+  return {
+    value: `₹${formatNumber(conversionSummary.totalsInr?.[key] ?? 0)}`,
+    note: `${completeness.converted}/${completeness.total} exact-date rows`,
+    complete: true,
+    empty: false,
+  };
+}
+
+function sourceHoldingsMetric(schedules) {
+  const positions = schedules?.fa ?? [];
+  if (positions.length === 0) {
+    return {
+      value: "₹0",
+      note: "No mapped positions",
+      complete: true,
+    };
+  }
+
+  const currencies = [
+    ...new Set(
+      positions
+        .map((position) => String(position.currency ?? "").trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  ];
+  if (currencies.length !== 1) {
+    return {
+      value: `${positions.length} positions`,
+      note: "Mixed currencies · Schedule FA review",
+      complete: false,
+    };
+  }
+
+  const total = positions.reduce(
+    (sum, position) => sum + (Number(position.value) || 0),
+    0,
+  );
+  const [currency] = currencies;
+  return {
+    value: currency === "INR" ? `₹${formatNumber(total)}` : `${currency} ${formatNumber(total)}`,
+    note:
+      currency === "INR"
+        ? "Source closing value"
+        : "Source closing value · FA FX review",
+    complete: currency === "INR",
+  };
+}
+
+function renderHeadlineCard({ label, value, note, warning = false }) {
+  return `
+    <div class="headline-metric${warning ? " is-review" : ""}">
+      <small>${escapeHtml(label)}</small>
+      <strong>${escapeHtml(value)}</strong>
+      <span>${escapeHtml(note)}</span>
+    </div>`;
+}
+
+function renderReviewHeadline() {
+  if (!elements.reviewHeadline) return;
+  if (!state.review) {
+    elements.reviewHeadline.innerHTML = [
+      ["STCG", "—", "Load a statement to review"],
+      ["LTCG", "—", "Load a statement to review"],
+      ["Dividends", "—", "Exact-date INR preview"],
+      ["Interest", "—", "Exact-date INR preview"],
+      ["Foreign tax paid", "—", "Rule 128 conversion preview"],
+      ["FTC candidate", "—", "Eligibility is not computed"],
+      ["Holdings", "—", "Source closing value"],
+    ]
+      .map(([label, value, note]) => renderHeadlineCard({ label, value, note }))
+      .join("");
+    return;
+  }
+
+  const schedules = state.review.schedules ?? {};
+  const conversionSummary = getConversionSummary();
+  const capitalGains = convertedInrMetric(conversionSummary, "capitalGains");
+  const dividends = convertedInrMetric(conversionSummary, "dividends");
+  const interest = convertedInrMetric(conversionSummary, "interest");
+  const foreignTax = convertedInrMetric(conversionSummary, "foreignTax");
+  const holdings = sourceHoldingsMetric(schedules);
+  const hasCapitalGainRows = (schedules.capitalGains?.length ?? 0) > 0;
+  const capitalGainNote = hasCapitalGainRows
+    ? capitalGains.complete
+      ? `${capitalGains.value} total source P/L · unclassified`
+      : "Total source P/L needs an exact rate"
+    : "No disposal rows";
+
+  elements.reviewHeadline.innerHTML = [
+    {
+      label: "STCG",
+      value: hasCapitalGainRows ? "Review" : "₹0",
+      note: capitalGainNote,
+      warning: hasCapitalGainRows,
+    },
+    {
+      label: "LTCG",
+      value: hasCapitalGainRows ? "Review" : "₹0",
+      note: hasCapitalGainRows ? "Holding period and lot matching not inferred" : "No disposal rows",
+      warning: hasCapitalGainRows,
+    },
+    {
+      label: "Dividends",
+      ...dividends,
+      warning: !dividends.complete,
+    },
+    {
+      label: "Interest",
+      ...interest,
+      warning: !interest.complete,
+    },
+    {
+      label: "Foreign tax paid",
+      ...foreignTax,
+      warning: !foreignTax.complete,
+    },
+    {
+      label: "FTC candidate",
+      value: foreignTax.empty
+        ? "₹0"
+        : foreignTax.complete
+          ? `Up to ${foreignTax.value}`
+          : "Review",
+      note: "Eligibility and per-country cap are not computed",
+      warning: !foreignTax.empty,
+    },
+    {
+      label: "Holdings",
+      ...holdings,
+      warning: !holdings.complete,
+    },
+  ]
+    .map(renderHeadlineCard)
+    .join("");
+}
+
+function renderAuditCountGrid(items, label) {
+  return `
+    <div class="audit-count-grid" aria-label="${escapeHtml(label)}">
+      ${items
+        .map(
+          ({ label: itemLabel, value, note = "" }) => `
+            <div class="audit-count-item">
+              <span>${escapeHtml(itemLabel)}</span>
+              <strong>${escapeHtml(formatNumber(value))}</strong>
+              ${note ? `<small>${escapeHtml(note)}</small>` : ""}
+            </div>`,
+        )
+        .join("")}
+    </div>`;
+}
+
+function auditSeverityCounts(validations = []) {
+  const counts = { error: 0, warning: 0, info: 0 };
+  validations.forEach((validation) => {
+    const severity = ["error", "warning", "info"].includes(validation.severity)
+      ? validation.severity
+      : "info";
+    counts[severity] += 1;
+  });
+  return counts;
+}
+
+function renderAuditTab() {
+  const review = state.review;
+  if (!review) {
+    return '<div class="empty-review">Load a statement or the synthetic demo to inspect its audit trail.</div>';
+  }
+
+  const summary = review.summary ?? {};
+  const schedules = review.schedules ?? {};
+  const validations = review.validations ?? [];
+  const conversionSummary = getConversionSummary();
+  const severity = auditSeverityCounts(validations);
+  const config = getConfig();
+  const rateReference = review.referenceData?.usdTtBuyRates ?? {};
+  const companyReference = review.referenceData?.companyLookup ?? {};
+  const sourceItems = [
+    { label: "Files", value: summary.files ?? 0, note: "Names hidden here" },
+    { label: "Data rows received", value: summary.dataRowsReceived ?? 0 },
+    {
+      label: "Accepted data rows",
+      value: summary.dataRowsAccepted ?? 0,
+      note: "After exact duplicate suppression",
+    },
+    { label: "Statement sections", value: summary.sections ?? 0 },
+    { label: "Trades", value: summary.trades ?? 0 },
+    { label: "Buy trades", value: summary.buyTrades ?? 0 },
+    { label: "Disposal trades", value: summary.saleTrades ?? 0 },
+    { label: "Instruments", value: summary.instruments ?? 0 },
+    { label: "Dividends", value: summary.dividends ?? 0 },
+    { label: "WHT rows", value: summary.withholding ?? 0 },
+    { label: "Interest", value: summary.interest ?? 0 },
+    { label: "Positions", value: summary.positions ?? 0 },
+    { label: "Transfers", value: summary.transfers ?? 0 },
+    {
+      label: "Duplicates suppressed",
+      value: summary.duplicateRowsSuppressed ?? 0,
+    },
+  ];
+  const outputItems = [
+    { label: "Capital gains rows", value: schedules.capitalGains?.length ?? 0 },
+    { label: "FSI rows", value: schedules.fsi?.length ?? 0 },
+    { label: "TR rows", value: schedules.tr?.length ?? 0 },
+    { label: "FA rows", value: schedules.fa?.length ?? 0 },
+    { label: "Conversion rows", value: conversionSummary.total ?? 0 },
+    { label: "Prescribed dates", value: conversionSummary.dates ?? 0 },
+    { label: "Exact rates matched", value: conversionSummary.matched ?? 0 },
+    { label: "Automated checks", value: validations.length },
+  ];
+  const reconciliationRows = [
+    {
+      paper: "Capital gains",
+      source: summary.saleTrades ?? 0,
+      output: schedules.capitalGains?.length ?? 0,
+      note: "One draft row per disposal trade; no FIFO expansion.",
+    },
+    {
+      paper: "FSI",
+      source: (summary.dividends ?? 0) + (summary.interest ?? 0),
+      output: schedules.fsi?.length ?? 0,
+      note: "Dividend and interest source rows.",
+    },
+    {
+      paper: "TR",
+      source: summary.withholding ?? 0,
+      output: schedules.tr?.length ?? 0,
+      note: "Foreign withholding rows; eligibility is not decided.",
+    },
+    {
+      paper: "Schedule FA",
+      source: summary.positions ?? 0,
+      output: schedules.fa?.length ?? 0,
+      note: "Open-position rows; peak and INR values remain for review.",
+    },
+  ];
+  const validationList = validations.length
+    ? `<ul class="audit-validation-list">
+        ${validations
+          .slice(0, 8)
+          .map((validation) => {
+            const severityName = ["error", "warning", "info"].includes(validation.severity)
+              ? validation.severity
+              : "info";
+            return `
+              <li>
+                <span class="audit-severity is-${severityName}">${severityName}</span>
+                <strong>${escapeHtml(validation.code)}</strong>
+                <span>${escapeHtml(validation.message)}</span>
+              </li>`;
+          })
+          .join("")}
+      </ul>`
+    : '<p class="audit-empty-note">No automated findings. Professional review is still required.</p>';
+  const sourceLabel =
+    state.sourceKind === "demo" ? "Synthetic fixture" : "User-selected local statements";
+  const methodology = [
+    {
+      label: "Rule 115",
+      text: "Supported categories use their prescribed calendar date. Exact-date lookup is used; no prior-business-day substitution is made.",
+    },
+    {
+      label: "Rule 128",
+      text: "Foreign tax conversion uses the last calendar day of the month preceding the mapped tax paid/deducted date. FTC eligibility is not decided.",
+    },
+    {
+      label: "Capital gains",
+      text: "IBKR basis and realized P/L remain source references. Acquisition-date matching, FIFO lots, STCG/LTCG classification, and tax rates are not inferred.",
+    },
+    {
+      label: "FSI",
+      text: "Dividend and interest rows become draft FSI rows. IBKR cash interest defaults to other-source interest and remains flagged for classification review.",
+    },
+    {
+      label: "Schedule FA",
+      text: "Open positions become draft FA rows. Peak value and required INR conversion remain reviewer tasks.",
+    },
+    {
+      label: "Company matching",
+      text: "Offline SEC ticker associations add names and exchanges only; they do not establish issuer residence or treaty treatment.",
+    },
+    {
+      label: "TTBR evidence",
+      text: "The bundled community SBI archive or a local override supplies draft USD matches. Retain primary SBI evidence for material dates.",
+    },
+    {
+      label: "Privacy",
+      text: "Imported statements stay in this browser session. The audit view omits taxpayer identifiers and file names.",
+    },
+  ];
+
+  return `
+    <section class="audit-tab-panel" aria-labelledby="audit-tab-title">
+      <div class="audit-note">
+        <span class="audit-note-mark" aria-hidden="true">i</span>
+        <div>
+          <h4 id="audit-tab-title">Audit trail</h4>
+          <p>Source counts, generated working-paper counts, and method assumptions for this browser session. Reconcile parser coverage before relying on downloads.</p>
+        </div>
+      </div>
+
+      <section class="audit-section-card" aria-labelledby="audit-source-title">
+        <div class="audit-section-heading">
+          <div>
+            <span>Source data</span>
+            <h5 id="audit-source-title">What the parser accepted</h5>
+          </div>
+          <small>Counts include all recognized statement sections.</small>
+        </div>
+        ${renderAuditCountGrid(sourceItems, "Source data counts")}
+      </section>
+
+      <section class="audit-section-card" aria-labelledby="audit-output-title">
+        <div class="audit-section-heading">
+          <div>
+            <span>Generated working papers</span>
+            <h5 id="audit-output-title">What the app produced</h5>
+          </div>
+          <small>Draft rows only; not an ITR submission.</small>
+        </div>
+        ${renderAuditCountGrid(outputItems, "Generated working-paper counts")}
+      </section>
+
+      <section class="audit-section-card" aria-labelledby="audit-reconciliation-title">
+        <div class="audit-section-heading">
+          <div>
+            <span>Reconciliation</span>
+            <h5 id="audit-reconciliation-title">Source-to-output row checks</h5>
+          </div>
+        </div>
+        <div class="audit-table-wrap">
+          <table class="audit-reconciliation-table">
+            <thead>
+              <tr>
+                <th scope="col">Working paper</th>
+                <th scope="col">Source rows</th>
+                <th scope="col">Output rows</th>
+                <th scope="col">Status</th>
+                <th scope="col">Method note</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${reconciliationRows
+                .map((row) => {
+                  const reconciled = Number(row.source) === Number(row.output);
+                  return `
+                    <tr>
+                      <th scope="row">${escapeHtml(row.paper)}</th>
+                      <td>${escapeHtml(formatNumber(row.source))}</td>
+                      <td>${escapeHtml(formatNumber(row.output))}</td>
+                      <td><span class="audit-status${reconciled ? " is-ready" : " is-review"}">${reconciled ? "Reconciled" : "Review"}</span></td>
+                      <td>${escapeHtml(row.note)}</td>
+                    </tr>`;
+                })
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="audit-section-card" aria-labelledby="audit-method-title">
+        <div class="audit-section-heading">
+          <div>
+            <span>Methodology summary</span>
+            <h5 id="audit-method-title">Rules and deliberate boundaries</h5>
+          </div>
+        </div>
+        <dl class="audit-method-list">
+          ${methodology
+            .map(
+              (item) => `
+                <div>
+                  <dt>${escapeHtml(item.label)}</dt>
+                  <dd>${escapeHtml(item.text)}</dd>
+                </div>`,
+            )
+            .join("")}
+        </dl>
+      </section>
+
+      <section class="audit-section-card" aria-labelledby="audit-assumption-title">
+        <div class="audit-section-heading">
+          <div>
+            <span>Session assumptions</span>
+            <h5 id="audit-assumption-title">Configuration and provenance</h5>
+          </div>
+        </div>
+        <dl class="audit-assumption-grid">
+          <div><dt>Source session</dt><dd>${escapeHtml(sourceLabel)}</dd></div>
+          <div><dt>Assessment year</dt><dd>AY ${escapeHtml(config.assessmentYear)}</dd></div>
+          <div><dt>Residential status</dt><dd>${escapeHtml(config.residentialStatus)}</dd></div>
+          <div><dt>Return assumption</dt><dd>${escapeHtml(config.returnForm)}</dd></div>
+          <div><dt>Broker base currency</dt><dd>${escapeHtml(config.baseCurrency)}</dd></div>
+          <div><dt>TTBR source</dt><dd>${escapeHtml(rateReference.provider ?? "—")} · ${escapeHtml(formatNumber(rateReference.records ?? 0))} rows</dd></div>
+          <div><dt>Company source</dt><dd>${escapeHtml(companyReference.provider ?? "—")} · ${escapeHtml(formatNumber(companyReference.records ?? 0))} records</dd></div>
+          <div><dt>Conversion coverage</dt><dd>${escapeHtml(formatNumber(conversionSummary.matched ?? 0))}/${escapeHtml(formatNumber(conversionSummary.total ?? 0))} exact matches · ${escapeHtml(formatNumber(conversionSummary.missing ?? 0))} missing · ${escapeHtml(formatNumber(conversionSummary.ambiguous ?? 0))} ambiguous</dd></div>
+        </dl>
+      </section>
+
+      <section class="audit-section-card" aria-labelledby="audit-validation-title">
+        <div class="audit-section-heading">
+          <div>
+            <span>Validation snapshot</span>
+            <h5 id="audit-validation-title">Automated findings</h5>
+          </div>
+        </div>
+        ${renderAuditCountGrid(
+          [
+            { label: "Errors", value: severity.error },
+            { label: "Warnings", value: severity.warning },
+            { label: "Information", value: severity.info },
+          ],
+          "Validation severity counts",
+        )}
+        ${validationList}
+      </section>
+    </section>`;
 }
 
 function renderConfigureConversionSummary() {
@@ -685,27 +1132,31 @@ function renderReviewTab() {
   const { schedules } = state.review;
   const conversionSummary = getConversionSummary();
   if (state.reviewTab === "overview") {
+    const capitalGains = convertedInrMetric(conversionSummary, "capitalGains");
+    const dividends = convertedInrMetric(conversionSummary, "dividends");
+    const interest = convertedInrMetric(conversionSummary, "interest");
+    const foreignTax = convertedInrMetric(conversionSummary, "foreignTax");
     elements.reviewContent.innerHTML = `
       <div class="review-summary">
         <div class="summary-block">
           <small>Capital gains · INR review</small>
-          <strong>₹${escapeHtml(formatNumber(conversionSummary.totalsInr?.capitalGains))}</strong>
-          <span>${escapeHtml(completenessLabel(conversionSummary.completeness?.capitalGains))}</span>
+          <strong>${escapeHtml(capitalGains.value)}</strong>
+          <span>${escapeHtml(capitalGains.note)} · STCG/LTCG not inferred</span>
         </div>
         <div class="summary-block">
           <small>Dividends · INR review</small>
-          <strong>₹${escapeHtml(formatNumber(conversionSummary.totalsInr?.dividends))}</strong>
-          <span>${escapeHtml(completenessLabel(conversionSummary.completeness?.dividends))}</span>
+          <strong>${escapeHtml(dividends.value)}</strong>
+          <span>${escapeHtml(dividends.note)}</span>
         </div>
         <div class="summary-block">
           <small>Interest · INR review</small>
-          <strong>₹${escapeHtml(formatNumber(conversionSummary.totalsInr?.interest))}</strong>
-          <span>${escapeHtml(completenessLabel(conversionSummary.completeness?.interest))}</span>
+          <strong>${escapeHtml(interest.value)}</strong>
+          <span>${escapeHtml(interest.note)} · classification review</span>
         </div>
         <div class="summary-block">
           <small>Foreign tax · INR review</small>
-          <strong>₹${escapeHtml(formatNumber(conversionSummary.totalsInr?.foreignTax))}</strong>
-          <span>${escapeHtml(completenessLabel(conversionSummary.completeness?.foreignTax))}</span>
+          <strong>${escapeHtml(foreignTax.value)}</strong>
+          <span>${escapeHtml(foreignTax.note)} · FTC eligibility not computed</span>
         </div>
         <div class="summary-block">
           <small>TTBR coverage</small>
@@ -800,16 +1251,27 @@ function renderReviewTab() {
     return;
   }
 
-  elements.reviewContent.innerHTML = renderTable(schedules.fa, [
-    { key: "assetCategory", label: "Asset class" },
-    { key: "symbol", label: "Symbol" },
-    { label: "Company", value: (row) => row.company?.name || "Unmatched" },
-    { label: "Exchange", value: (row) => row.company?.exchange || "—" },
-    { key: "currency", label: "CCY" },
-    { key: "quantity", label: "Quantity", format: "number" },
-    { key: "value", label: "Closing value", format: "number" },
-    { key: "needsFx", label: "FX status" },
-  ]);
+  if (state.reviewTab === "fa") {
+    elements.reviewContent.innerHTML = renderTable(schedules.fa, [
+      { key: "assetCategory", label: "Asset class" },
+      { key: "symbol", label: "Symbol" },
+      { label: "Company", value: (row) => row.company?.name || "Unmatched" },
+      { label: "Exchange", value: (row) => row.company?.exchange || "—" },
+      { key: "currency", label: "CCY" },
+      { key: "quantity", label: "Quantity", format: "number" },
+      { key: "value", label: "Closing value", format: "number" },
+      { key: "needsFx", label: "FX status" },
+    ]);
+    return;
+  }
+
+  if (state.reviewTab === "audit") {
+    elements.reviewContent.innerHTML = renderAuditTab();
+    return;
+  }
+
+  setReviewTab("overview");
+  renderReviewTab();
 }
 
 function renderValidations() {
@@ -863,18 +1325,15 @@ function renderReview() {
   };
   const validations = state.review?.validations ?? [];
 
-  document.querySelector('[data-metric="trades"]').textContent = String(summary.trades);
-  document.querySelector('[data-metric="positions"]').textContent = String(summary.positions);
-  document.querySelector('[data-metric="dividends"]').textContent = String(summary.dividends);
-  document.querySelector('[data-metric="checks"]').textContent = String(validations.length);
   elements.auditFiles.textContent = String(summary.files);
   elements.auditRows.textContent = String(
-    summary.trades +
-      summary.positions +
-      summary.dividends +
-      (summary.withholding ?? 0) +
-      (summary.interest ?? 0) +
-      (summary.transfers ?? 0),
+    summary.dataRowsAccepted ??
+      summary.trades +
+        summary.positions +
+        summary.dividends +
+        (summary.withholding ?? 0) +
+        (summary.interest ?? 0) +
+        (summary.transfers ?? 0),
   );
   elements.reviewStamp.textContent = state.reviewConfirmed
     ? "Review checked"
@@ -888,6 +1347,7 @@ function renderReview() {
     : "stamp stamp-review";
 
   renderConfigureConversionSummary();
+  renderReviewHeadline();
   renderReviewTab();
   renderValidations();
 }
@@ -1084,15 +1544,12 @@ function resetSession() {
   state.files = [];
   state.review = null;
   invalidateReviewConfirmation();
-  state.reviewTab = "overview";
   state.sourceKind = null;
   state.rateSourceKind = "bundled-community";
   state.usdTtBuyRates = BUNDLED_USD_TT_BUY_RATES;
   elements.fileInput.value = "";
   elements.rateFileInput.value = "";
-  document.querySelectorAll("[data-review-tab]").forEach((button) => {
-    button.setAttribute("aria-selected", String(button.dataset.reviewTab === "overview"));
-  });
+  setReviewTab("overview");
   updateFileList();
   renderReferenceData();
   setRateStatus("Using the bundled, pinned community USD reference table.");
@@ -1149,10 +1606,28 @@ document.querySelector('[data-action="demo"]').addEventListener("click", loadDem
 
 document.querySelectorAll("[data-review-tab]").forEach((button) => {
   button.addEventListener("click", () => {
-    state.reviewTab = button.dataset.reviewTab;
-    document.querySelectorAll("[data-review-tab]").forEach((tab) => {
-      tab.setAttribute("aria-selected", String(tab === button));
-    });
+    setReviewTab(button.dataset.reviewTab);
+    renderReviewTab();
+  });
+  button.addEventListener("keydown", (event) => {
+    const tabs = [...document.querySelectorAll("[data-review-tab]")];
+    const currentIndex = tabs.indexOf(button);
+    let nextIndex = currentIndex;
+    if (event.key === "ArrowRight") {
+      nextIndex = (currentIndex + 1) % tabs.length;
+    } else if (event.key === "ArrowLeft") {
+      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = tabs.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    const nextTab = tabs[nextIndex];
+    setReviewTab(nextTab.dataset.reviewTab);
+    nextTab.focus();
     renderReviewTab();
   });
 });

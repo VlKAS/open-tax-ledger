@@ -411,21 +411,106 @@
                 treatment, Rule 115 conversion, and FTC eligibility still require review.
               </p>
 
-              <div class="metric-strip" aria-label="Imported statement summary">
-                <div><small>Trades</small><strong data-metric="trades">0</strong></div>
-                <div><small>Positions</small><strong data-metric="positions">0</strong></div>
-                <div><small>Dividends</small><strong data-metric="dividends">0</strong></div>
-                <div><small>Checks</small><strong data-metric="checks">0</strong></div>
+              <div
+                class="review-headline-strip"
+                aria-label="Draft tax and holdings summary"
+                data-review-headline
+              >
+                <div class="headline-metric">
+                  <small>STCG</small>
+                  <strong>—</strong>
+                  <span>Load a statement to review</span>
+                </div>
+                <div class="headline-metric">
+                  <small>LTCG</small>
+                  <strong>—</strong>
+                  <span>Load a statement to review</span>
+                </div>
+                <div class="headline-metric">
+                  <small>Dividends</small>
+                  <strong>—</strong>
+                  <span>Exact-date INR preview</span>
+                </div>
+                <div class="headline-metric">
+                  <small>Interest</small>
+                  <strong>—</strong>
+                  <span>Exact-date INR preview</span>
+                </div>
+                <div class="headline-metric">
+                  <small>Foreign tax paid</small>
+                  <strong>—</strong>
+                  <span>Rule 128 conversion preview</span>
+                </div>
+                <div class="headline-metric">
+                  <small>FTC candidate</small>
+                  <strong>—</strong>
+                  <span>Eligibility is not computed</span>
+                </div>
+                <div class="headline-metric">
+                  <small>Holdings</small>
+                  <strong>—</strong>
+                  <span>Source closing value</span>
+                </div>
               </div>
 
               <div class="review-tabs" role="tablist" aria-label="Draft schedules">
-                <button role="tab" aria-selected="true" data-review-tab="overview">Overview</button>
-                <button role="tab" aria-selected="false" data-review-tab="capitalGains">Capital gains</button>
-                <button role="tab" aria-selected="false" data-review-tab="fsi">FSI / TR</button>
-                <button role="tab" aria-selected="false" data-review-tab="fa">Schedule FA</button>
-                <button role="tab" aria-selected="false" data-review-tab="ttbr">Rule 115 / TTBR</button>
+                <button
+                  id="review-tab-overview"
+                  role="tab"
+                  aria-controls="review-tab-panel"
+                  aria-selected="true"
+                  tabindex="0"
+                  data-review-tab="overview"
+                >Overview</button>
+                <button
+                  id="review-tab-capitalGains"
+                  role="tab"
+                  aria-controls="review-tab-panel"
+                  aria-selected="false"
+                  tabindex="-1"
+                  data-review-tab="capitalGains"
+                >Capital gains</button>
+                <button
+                  id="review-tab-fsi"
+                  role="tab"
+                  aria-controls="review-tab-panel"
+                  aria-selected="false"
+                  tabindex="-1"
+                  data-review-tab="fsi"
+                >FSI / TR</button>
+                <button
+                  id="review-tab-fa"
+                  role="tab"
+                  aria-controls="review-tab-panel"
+                  aria-selected="false"
+                  tabindex="-1"
+                  data-review-tab="fa"
+                >Schedule FA</button>
+                <button
+                  id="review-tab-ttbr"
+                  role="tab"
+                  aria-controls="review-tab-panel"
+                  aria-selected="false"
+                  tabindex="-1"
+                  data-review-tab="ttbr"
+                >Rule 115 / TTBR</button>
+                <button
+                  id="review-tab-audit"
+                  role="tab"
+                  aria-controls="review-tab-panel"
+                  aria-selected="false"
+                  tabindex="-1"
+                  data-review-tab="audit"
+                >Audit</button>
               </div>
-              <div class="review-content" data-review-content>
+              <div
+                class="review-content"
+                id="review-tab-panel"
+                role="tabpanel"
+                aria-labelledby="review-tab-overview"
+                tabindex="0"
+                data-review-content
+              >
                 <div class="empty-review">
                   Load a statement or the synthetic demo to preview review tables.
                 </div>
