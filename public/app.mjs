@@ -106,6 +106,24 @@ function selectStep(step) {
   });
 }
 
+function focusWorkspaceStep(step) {
+  const workspace = document.querySelector("#workspace");
+  if (!workspace) return;
+
+  window.history.replaceState(
+    null,
+    "",
+    `${window.location.pathname}${window.location.search}#workspace`,
+  );
+  workspace.scrollIntoView({
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "auto"
+      : "smooth",
+    block: "start",
+  });
+  document.querySelector(`[data-step-target="${step}"]`)?.focus({ preventScroll: true });
+}
+
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -721,12 +739,16 @@ function sourceHoldingsMetric(schedules) {
   };
 }
 
-function renderHeadlineCard({ label, value, note, warning = false }) {
+function renderHeadlineCard({ label, value, note, warning = false, status = "" }) {
+  const stateLabel = status || (warning ? "Review" : "Ready");
   return `
     <div class="headline-metric${warning ? " is-review" : ""}">
-      <small>${escapeHtml(label)}</small>
+      <div class="headline-metric-top">
+        <small>${escapeHtml(label)}</small>
+        <span class="headline-state">${escapeHtml(stateLabel)}</span>
+      </div>
       <strong>${escapeHtml(value)}</strong>
-      <span>${escapeHtml(note)}</span>
+      <span class="headline-note">${escapeHtml(note)}</span>
     </div>`;
 }
 
@@ -742,7 +764,9 @@ function renderReviewHeadline() {
       ["FTC candidate", "—", "Eligibility is not computed"],
       ["Holdings", "—", "Source closing value"],
     ]
-      .map(([label, value, note]) => renderHeadlineCard({ label, value, note }))
+      .map(([label, value, note]) =>
+        renderHeadlineCard({ label, value, note, status: "Waiting" }),
+      )
       .join("");
     return;
   }
@@ -1602,7 +1626,14 @@ dropZone.addEventListener("drop", (event) => {
 });
 
 elements.processButton.addEventListener("click", processFiles);
-document.querySelector('[data-action="demo"]').addEventListener("click", loadDemo);
+document.querySelectorAll('[data-action="demo"]').forEach((button) => {
+  button.addEventListener("click", () => {
+    loadDemo();
+    if (!button.closest(".workspace-shell")) {
+      focusWorkspaceStep("configure");
+    }
+  });
+});
 
 document.querySelectorAll("[data-review-tab]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -1641,6 +1672,7 @@ document.querySelector('[data-action="confirm-review"]').addEventListener("click
   state.reviewConfirmed = true;
   renderReview();
   selectStep("export");
+  focusWorkspaceStep("export");
 });
 
 document.querySelectorAll("[data-action='clear']").forEach((button) => {

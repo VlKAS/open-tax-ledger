@@ -64,6 +64,9 @@
           </p>
           <div class="hero-actions">
             <a class="button button-primary" href="#workspace">Start in this browser</a>
+            <button class="button button-secondary" type="button" data-action="demo">
+              Try synthetic demo
+            </button>
             <a class="button button-quiet" href="#calculation-model">
               See the calculation model
             </a>
@@ -156,6 +159,19 @@
         </div>
 
         <div class="workspace-shell">
+          <div class="workspace-commandbar">
+            <div>
+              <span class="panel-kicker">Private browser workspace</span>
+              <strong>Import statements, confirm assumptions, preview every schedule, then export.</strong>
+            </div>
+            <div class="workspace-command-actions" aria-label="Workspace shortcuts">
+              <button class="button button-secondary" type="button" data-action="demo">
+                Load synthetic demo
+              </button>
+              <a class="button button-quiet" href="#calculation-model">Check methodology</a>
+            </div>
+          </div>
+
           <aside class="step-rail" aria-label="Preparation steps">
             <div class="rail-label">Preparation flow</div>
             <ol>
@@ -411,45 +427,67 @@
                 treatment, Rule 115 conversion, and FTC eligibility still require review.
               </p>
 
+              <div class="review-console-bar">
+                <div>
+                  <span class="panel-kicker">Review console</span>
+                  <strong>Resolve flagged assumptions before downloading the handoff pack.</strong>
+                </div>
+                <span>Preview first · export after confirmation</span>
+              </div>
+
               <div
                 class="review-headline-strip"
                 aria-label="Draft tax and holdings summary"
                 data-review-headline
               >
                 <div class="headline-metric">
-                  <small>STCG</small>
+                  <div class="headline-metric-top">
+                    <small>STCG</small><span class="headline-state">Waiting</span>
+                  </div>
                   <strong>—</strong>
-                  <span>Load a statement to review</span>
+                  <span class="headline-note">Load a statement to review</span>
                 </div>
                 <div class="headline-metric">
-                  <small>LTCG</small>
+                  <div class="headline-metric-top">
+                    <small>LTCG</small><span class="headline-state">Waiting</span>
+                  </div>
                   <strong>—</strong>
-                  <span>Load a statement to review</span>
+                  <span class="headline-note">Load a statement to review</span>
                 </div>
                 <div class="headline-metric">
-                  <small>Dividends</small>
+                  <div class="headline-metric-top">
+                    <small>Dividends</small><span class="headline-state">Waiting</span>
+                  </div>
                   <strong>—</strong>
-                  <span>Exact-date INR preview</span>
+                  <span class="headline-note">Exact-date INR preview</span>
                 </div>
                 <div class="headline-metric">
-                  <small>Interest</small>
+                  <div class="headline-metric-top">
+                    <small>Interest</small><span class="headline-state">Waiting</span>
+                  </div>
                   <strong>—</strong>
-                  <span>Exact-date INR preview</span>
+                  <span class="headline-note">Exact-date INR preview</span>
                 </div>
                 <div class="headline-metric">
-                  <small>Foreign tax paid</small>
+                  <div class="headline-metric-top">
+                    <small>Foreign tax paid</small><span class="headline-state">Waiting</span>
+                  </div>
                   <strong>—</strong>
-                  <span>Rule 128 conversion preview</span>
+                  <span class="headline-note">Rule 128 conversion preview</span>
                 </div>
                 <div class="headline-metric">
-                  <small>FTC candidate</small>
+                  <div class="headline-metric-top">
+                    <small>FTC candidate</small><span class="headline-state">Waiting</span>
+                  </div>
                   <strong>—</strong>
-                  <span>Eligibility is not computed</span>
+                  <span class="headline-note">Eligibility is not computed</span>
                 </div>
                 <div class="headline-metric">
-                  <small>Holdings</small>
+                  <div class="headline-metric-top">
+                    <small>Holdings</small><span class="headline-state">Waiting</span>
+                  </div>
                   <strong>—</strong>
-                  <span>Source closing value</span>
+                  <span class="headline-note">Source closing value</span>
                 </div>
               </div>
 
