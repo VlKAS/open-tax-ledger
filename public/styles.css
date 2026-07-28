@@ -179,12 +179,12 @@ summary:focus-visible {
 .hero {
   align-items: center;
   display: grid;
-  gap: clamp(48px, 7vw, 112px);
+  gap: clamp(44px, 6vw, 88px);
   grid-template-columns: minmax(0, 1.02fr) minmax(420px, 0.98fr);
   margin: 0 auto;
   max-width: 1450px;
-  min-height: calc(100svh - 78px);
-  padding: clamp(72px, 8vw, 130px) clamp(24px, 6vw, 88px) 90px;
+  min-height: auto;
+  padding: clamp(56px, 6vw, 88px) clamp(24px, 6vw, 88px) 68px;
 }
 
 .hero-copy {
@@ -221,17 +221,17 @@ summary:focus-visible {
 
 .hero h1 {
   font-family: var(--font-display);
-  font-size: clamp(54px, 6.1vw, 94px);
+  font-size: clamp(50px, 5.1vw, 78px);
   font-weight: 500;
-  letter-spacing: -0.055em;
-  line-height: 0.98;
-  margin: 27px 0 28px;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  margin: 22px 0 24px;
 }
 
 .hero-lede {
   color: #49443d;
-  font-size: clamp(18px, 1.45vw, 22px);
-  line-height: 1.55;
+  font-size: clamp(17px, 1.35vw, 21px);
+  line-height: 1.5;
   margin: 0;
   max-width: 660px;
 }
@@ -651,6 +651,21 @@ summary:focus-visible {
 .workspace-command-actions .button-quiet {
   border-color: rgba(251, 251, 245, 0.22);
   color: var(--paper-light);
+}
+
+.workspace-command-actions .button-audit {
+  background: rgba(220, 238, 233, 0.12);
+  border-color: rgba(158, 212, 200, 0.45);
+  color: #d7f0ea;
+}
+
+.audit-trust-dot {
+  background: #6bd0bc;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(107, 208, 188, 0.13);
+  height: 7px;
+  margin-right: 2px;
+  width: 7px;
 }
 
 .step-rail {
@@ -1293,7 +1308,7 @@ summary:focus-visible {
   color: var(--blue);
   flex: 0 0 auto;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 750;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1351,7 +1366,7 @@ summary:focus-visible {
   color: var(--teal-dark);
   flex: 0 0 auto;
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 750;
   padding: 3px 6px;
   text-transform: uppercase;
@@ -1372,7 +1387,7 @@ summary:focus-visible {
 
 .headline-metric .headline-note {
   color: var(--ink-soft);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.4;
   margin-top: auto;
 }
@@ -1419,7 +1434,7 @@ summary:focus-visible {
   flex: 0 0 auto;
   font-size: 11px;
   font-weight: 750;
-  min-height: 34px;
+  min-height: 44px;
   padding: 8px 11px;
 }
 
@@ -1525,13 +1540,14 @@ summary:focus-visible {
 
 .audit-note h4 {
   color: var(--teal-dark);
-  font-size: 11px;
+  font-size: 13px;
   margin: 0;
 }
 
 .audit-note p {
   color: #285f5a;
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 1.45;
   margin: 3px 0 0;
 }
 
@@ -1552,7 +1568,7 @@ summary:focus-visible {
 .audit-section-heading span {
   color: var(--ink-soft);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -1567,7 +1583,7 @@ summary:focus-visible {
 
 .audit-section-heading small {
   color: var(--ink-soft);
-  font-size: 9px;
+  font-size: 10px;
   max-width: 270px;
   text-align: right;
 }
@@ -1594,7 +1610,7 @@ summary:focus-visible {
 .audit-count-item > span {
   color: var(--ink-soft);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -1607,7 +1623,7 @@ summary:focus-visible {
 
 .audit-count-item small {
   color: var(--ink-soft);
-  font-size: 8px;
+  font-size: 9px;
   line-height: 1.35;
   margin-top: auto;
 }
@@ -1618,7 +1634,7 @@ summary:focus-visible {
 
 .audit-reconciliation-table {
   border-collapse: collapse;
-  font-size: 9px;
+  font-size: 10px;
   min-width: 720px;
   width: 100%;
 }
@@ -1635,13 +1651,13 @@ summary:focus-visible {
   background: #eee8dc;
   color: var(--ink-soft);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .audit-reconciliation-table tbody th {
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .audit-reconciliation-table td:nth-child(2),
@@ -1653,7 +1669,7 @@ summary:focus-visible {
 .audit-severity {
   display: inline-flex;
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 750;
   padding: 3px 6px;
   text-transform: uppercase;
@@ -1691,14 +1707,15 @@ summary:focus-visible {
 
 .audit-method-list dt,
 .audit-assumption-grid dt {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
 }
 
 .audit-method-list dd,
 .audit-assumption-grid dd {
   color: var(--ink-soft);
-  font-size: 9px;
+  font-size: 10px;
+  line-height: 1.45;
   margin: 0;
 }
 
@@ -1740,15 +1757,86 @@ summary:focus-visible {
 
 .audit-validation-list strong {
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 9px;
   overflow-wrap: anywhere;
 }
 
 .audit-validation-list li > span:last-child,
 .audit-empty-note {
   color: var(--ink-soft);
-  font-size: 9px;
+  font-size: 10px;
+  line-height: 1.4;
   margin: 0;
+}
+
+.audit-disclosure {
+  padding: 0;
+}
+
+.audit-disclosure summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  list-style: none;
+  min-height: 70px;
+  padding: 14px 17px;
+}
+
+.audit-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.audit-disclosure summary > span:first-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.audit-disclosure summary small {
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.audit-disclosure summary strong {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 500;
+  margin-top: 3px;
+}
+
+.audit-disclosure-action {
+  color: var(--teal-dark);
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.audit-disclosure-action::after {
+  content: " +";
+}
+
+.audit-disclosure[open] .audit-disclosure-action::after {
+  content: " −";
+}
+
+.audit-disclosure .when-open,
+.audit-disclosure[open] .when-closed {
+  display: none;
+}
+
+.audit-disclosure[open] .when-open {
+  display: inline;
+}
+
+.audit-disclosure > .audit-method-list,
+.audit-disclosure > .audit-assumption-grid {
+  margin: 0 17px 17px;
 }
 
 .data-table {
@@ -2532,11 +2620,11 @@ summary:focus-visible {
   }
 
   .hero {
-    padding: 60px 20px 70px;
+    padding: 48px 20px 56px;
   }
 
   .hero h1 {
-    font-size: clamp(46px, 15vw, 66px);
+    font-size: clamp(44px, 14vw, 58px);
   }
 
   .hero-actions,
@@ -2663,6 +2751,23 @@ summary:focus-visible {
 
   .audit-section-card {
     padding: 14px;
+  }
+
+  .audit-disclosure {
+    padding: 0;
+  }
+
+  .audit-disclosure summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    padding: 14px;
+  }
+
+  .audit-disclosure > .audit-method-list,
+  .audit-disclosure > .audit-assumption-grid {
+    margin: 0 14px 14px;
   }
 
   .audit-section-heading {

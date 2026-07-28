@@ -1057,45 +1057,6 @@ function renderAuditTab() {
         </div>
       </section>
 
-      <section class="audit-section-card" aria-labelledby="audit-method-title">
-        <div class="audit-section-heading">
-          <div>
-            <span>Methodology summary</span>
-            <h5 id="audit-method-title">Rules and deliberate boundaries</h5>
-          </div>
-        </div>
-        <dl class="audit-method-list">
-          ${methodology
-            .map(
-              (item) => `
-                <div>
-                  <dt>${escapeHtml(item.label)}</dt>
-                  <dd>${escapeHtml(item.text)}</dd>
-                </div>`,
-            )
-            .join("")}
-        </dl>
-      </section>
-
-      <section class="audit-section-card" aria-labelledby="audit-assumption-title">
-        <div class="audit-section-heading">
-          <div>
-            <span>Session assumptions</span>
-            <h5 id="audit-assumption-title">Configuration and provenance</h5>
-          </div>
-        </div>
-        <dl class="audit-assumption-grid">
-          <div><dt>Source session</dt><dd>${escapeHtml(sourceLabel)}</dd></div>
-          <div><dt>Assessment year</dt><dd>AY ${escapeHtml(config.assessmentYear)}</dd></div>
-          <div><dt>Residential status</dt><dd>${escapeHtml(config.residentialStatus)}</dd></div>
-          <div><dt>Return assumption</dt><dd>${escapeHtml(config.returnForm)}</dd></div>
-          <div><dt>Broker base currency</dt><dd>${escapeHtml(config.baseCurrency)}</dd></div>
-          <div><dt>TTBR source</dt><dd>${escapeHtml(rateReference.provider ?? "—")} · ${escapeHtml(formatNumber(rateReference.records ?? 0))} rows</dd></div>
-          <div><dt>Company source</dt><dd>${escapeHtml(companyReference.provider ?? "—")} · ${escapeHtml(formatNumber(companyReference.records ?? 0))} records</dd></div>
-          <div><dt>Conversion coverage</dt><dd>${escapeHtml(formatNumber(conversionSummary.matched ?? 0))}/${escapeHtml(formatNumber(conversionSummary.total ?? 0))} exact matches · ${escapeHtml(formatNumber(conversionSummary.missing ?? 0))} missing · ${escapeHtml(formatNumber(conversionSummary.ambiguous ?? 0))} ambiguous</dd></div>
-        </dl>
-      </section>
-
       <section class="audit-section-card" aria-labelledby="audit-validation-title">
         <div class="audit-section-heading">
           <div>
@@ -1113,6 +1074,53 @@ function renderAuditTab() {
         )}
         ${validationList}
       </section>
+
+      <details class="audit-section-card audit-disclosure">
+        <summary>
+          <span>
+            <small>Methodology summary</small>
+            <strong id="audit-method-title">Rules and deliberate boundaries</strong>
+          </span>
+          <span class="audit-disclosure-action">
+            <span class="when-closed">Show 8 rules</span>
+            <span class="when-open">Hide rules</span>
+          </span>
+        </summary>
+        <dl class="audit-method-list" aria-labelledby="audit-method-title">
+          ${methodology
+            .map(
+              (item) => `
+                <div>
+                  <dt>${escapeHtml(item.label)}</dt>
+                  <dd>${escapeHtml(item.text)}</dd>
+                </div>`,
+            )
+            .join("")}
+        </dl>
+      </details>
+
+      <details class="audit-section-card audit-disclosure">
+        <summary>
+          <span>
+            <small>Session assumptions</small>
+            <strong id="audit-assumption-title">Configuration and provenance</strong>
+          </span>
+          <span class="audit-disclosure-action">
+            <span class="when-closed">Show session details</span>
+            <span class="when-open">Hide session details</span>
+          </span>
+        </summary>
+        <dl class="audit-assumption-grid" aria-labelledby="audit-assumption-title">
+          <div><dt>Source session</dt><dd>${escapeHtml(sourceLabel)}</dd></div>
+          <div><dt>Assessment year</dt><dd>AY ${escapeHtml(config.assessmentYear)}</dd></div>
+          <div><dt>Residential status</dt><dd>${escapeHtml(config.residentialStatus)}</dd></div>
+          <div><dt>Return assumption</dt><dd>${escapeHtml(config.returnForm)}</dd></div>
+          <div><dt>Broker base currency</dt><dd>${escapeHtml(config.baseCurrency)}</dd></div>
+          <div><dt>TTBR source</dt><dd>${escapeHtml(rateReference.provider ?? "—")} · ${escapeHtml(formatNumber(rateReference.records ?? 0))} rows</dd></div>
+          <div><dt>Company source</dt><dd>${escapeHtml(companyReference.provider ?? "—")} · ${escapeHtml(formatNumber(companyReference.records ?? 0))} records</dd></div>
+          <div><dt>Conversion coverage</dt><dd>${escapeHtml(formatNumber(conversionSummary.matched ?? 0))}/${escapeHtml(formatNumber(conversionSummary.total ?? 0))} exact matches · ${escapeHtml(formatNumber(conversionSummary.missing ?? 0))} missing · ${escapeHtml(formatNumber(conversionSummary.ambiguous ?? 0))} ambiguous</dd></div>
+        </dl>
+      </details>
     </section>`;
 }
 
@@ -1633,6 +1641,23 @@ document.querySelectorAll('[data-action="demo"]').forEach((button) => {
       focusWorkspaceStep("configure");
     }
   });
+});
+
+document.querySelector('[data-action="open-audit"]').addEventListener("click", () => {
+  if (!state.review) {
+    showToast("Load statements or the synthetic demo to inspect the audit trail.");
+    selectStep("import");
+    focusWorkspaceStep("import");
+    return;
+  }
+
+  setReviewTab("audit");
+  renderReviewTab();
+  selectStep("review");
+  focusWorkspaceStep("review");
+  document
+    .querySelector('[data-review-tab="audit"]')
+    ?.focus({ preventScroll: true });
 });
 
 document.querySelectorAll("[data-review-tab]").forEach((button) => {
