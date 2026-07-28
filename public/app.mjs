@@ -3,6 +3,7 @@ import {
   makeDemoReview,
   parseIbkrStatements,
 } from "./lib/ibkr.js";
+import { buildTaxSummary } from "./lib/tax-summary.js";
 import { csvCell } from "./lib/export.js";
 import {
   enrichReviewWithReferenceData,
@@ -13,6 +14,28 @@ import {
   BUNDLED_SBI_USD_CSV,
   BUNDLED_SEC_COMPANY_JSON,
 } from "./lib/reference-data.generated.js";
+
+function blockFramedUse() {
+  if (window.top === window.self) {
+    return false;
+  }
+
+  document.body.replaceChildren();
+  const warning = document.createElement("main");
+  warning.className = "frame-block";
+  const heading = document.createElement("h1");
+  heading.textContent = "Open this tax workspace directly";
+  const message = document.createElement("p");
+  message.textContent =
+    "OpenTax Ledger will not process financial files while embedded inside another website.";
+  warning.append(heading, message);
+  document.body.append(warning);
+  return true;
+}
+
+if (blockFramedUse()) {
+  await new Promise(() => {});
+}
 
 const BUNDLED_USD_TT_BUY_RATES = parseSbiReferenceRatesCsv(BUNDLED_SBI_USD_CSV, {
   provider: "SBI FX RateKeeper community archive",
@@ -32,6 +55,8 @@ const BUNDLED_COMPANY_LOOKUP = parseSecCompanyTickersExchange(
 const state = {
   currentStep: "import",
   files: [],
+  parsed: null,
+  baseReview: null,
   review: null,
   reviewConfirmed: false,
   reviewTab: "overview",
@@ -72,6 +97,25 @@ function withReferenceData(review) {
     companyLookup: BUNDLED_COMPANY_LOOKUP,
     usdTtBuyRates: state.usdTtBuyRates,
   });
+}
+
+function currentAssessmentYear() {
+  return getConfig().assessmentYear || "2026-27";
+}
+
+function rebuildReviewFromBase() {
+  if (state.parsed) {
+    state.baseReview = buildReviewModel(state.parsed, {
+      assessmentYear: currentAssessmentYear(),
+    });
+  } else if (state.sourceKind === "demo") {
+    state.baseReview = makeDemoReview({
+      assessmentYear: currentAssessmentYear(),
+    });
+  }
+  state.review = state.baseReview ? withReferenceData(state.baseReview) : null;
+  invalidateReviewConfirmation();
+  renderReview();
 }
 
 function selectStep(step) {
@@ -181,6 +225,8 @@ function setReviewTab(tabName) {
 }
 
 function discardParsedReviewForFileChange() {
+  state.parsed = null;
+  state.baseReview = null;
   state.review = null;
   state.sourceKind = null;
   invalidateReviewConfirmation();
@@ -256,9 +302,8 @@ async function importRateFile() {
     state.usdTtBuyRates = table;
     state.rateSourceKind = "user-supplied";
     invalidateReviewConfirmation();
-    if (state.review) {
-      state.review = withReferenceData(state.review);
-      renderReview();
+    if (state.baseReview || state.parsed) {
+      rebuildReviewFromBase();
     }
     renderReferenceData();
     setRateStatus(
@@ -396,9 +441,9 @@ async function processFiles() {
     const parsed = parseIbkrStatements(csvs, {
       fileNames: state.files.map((file) => file.name),
     });
-    state.review = withReferenceData(buildReviewModel(parsed));
-    invalidateReviewConfirmation();
+    state.parsed = parsed;
     state.sourceKind = "user";
+    rebuildReviewFromBase();
     setReviewTab("overview");
     renderReview();
     setImportStatus(
@@ -407,6 +452,8 @@ async function processFiles() {
     );
     selectStep("configure");
   } catch (error) {
+    state.parsed = null;
+    state.baseReview = null;
     state.review = null;
     setImportStatus(
       error instanceof Error
@@ -421,10 +468,14 @@ async function processFiles() {
 }
 
 function loadDemo() {
-  state.review = withReferenceData(makeDemoReview());
-  invalidateReviewConfirmation();
+  state.parsed = null;
+  state.baseReview = makeDemoReview({
+    assessmentYear: currentAssessmentYear(),
+  });
+  state.review = withReferenceData(state.baseReview);
   state.sourceKind = "demo";
   state.files = [];
+  invalidateReviewConfirmation();
   setReviewTab("overview");
   updateFileList();
   renderReview();
@@ -442,6 +493,21 @@ function getConfig() {
     ),
     rateSource: state.rateSourceKind,
   };
+}
+
+function parseTaxRate(value) {
+  const raw = Number(value);
+  if (!Number.isFinite(raw) || raw < 0) return 0;
+  return raw > 1 ? raw / 100 : raw;
+}
+
+function getTaxSummary() {
+  if (!state.review) return null;
+  const config = getConfig();
+  return buildTaxSummary(state.review, {
+    marginalTaxRate: parseTaxRate(config.marginalTaxRate),
+    dtaaSection: config.dtaaSection || "90",
+  });
 }
 
 function humanizeKey(key) {
@@ -519,6 +585,19 @@ function formatConversionObservations(observations = []) {
     .join("; ");
 }
 
+function conversionSelectionLabel(conversion = {}) {
+  if (conversion.status === "not-required") return "Not required";
+  if (conversion.selection === "prior-observation") {
+    return `${conversion.observationDate || "Prior observation"}${
+      Number.isFinite(Number(conversion.daysPrior))
+        ? ` · ${conversion.daysPrior} day(s) before`
+        : ""
+    }`;
+  }
+  if (conversion.selection === "exact") return "Exact date";
+  return "No usable observation";
+}
+
 function conversionEvidenceUrls(conversion = {}) {
   return [
     conversion.sourceUrl,
@@ -587,7 +666,7 @@ function conversionLedgerRows() {
       category: conversion.category || row.incomeType || row.assetCategory || "—",
       eventDate: conversion.eventDate || row.date || "—",
       specifiedDate: specifiedDate || "—",
-      dateRule: conversion.dateRule || "Exact date only",
+      dateRule: conversion.dateRule || "Statutory date retained; source observation documented",
       status,
       rate: conversion.rate ?? "",
       sourceUrl,
@@ -595,6 +674,7 @@ function conversionLedgerRows() {
       amountForeign: 0,
       amountInr: 0,
       observationCount: conversion.observations?.length ?? 0,
+      observation: conversionSelectionLabel(conversion),
       candidateObservations: formatConversionObservations(conversion.observations),
       evidenceUrls: evidenceUrls.join("\n"),
       classificationReview: conversion.classificationReview || "",
@@ -621,10 +701,10 @@ function fallbackConversionSummary() {
     foreignTax: 0,
   };
   const completeness = {
-    capitalGains: { total: 0, converted: 0 },
-    dividends: { total: 0, converted: 0 },
-    interest: { total: 0, converted: 0 },
-    foreignTax: { total: 0, converted: 0 },
+    capitalGains: { total: 0, converted: 0, verified: 0, priorObservation: 0 },
+    dividends: { total: 0, converted: 0, verified: 0, priorObservation: 0 },
+    interest: { total: 0, converted: 0, verified: 0, priorObservation: 0 },
+    foreignTax: { total: 0, converted: 0, verified: 0, priorObservation: 0 },
   };
   const summary = {
     total: rows.length,
@@ -661,6 +741,11 @@ function fallbackConversionSummary() {
     completeness[bucket].total += 1;
     if (status === "matched" || status === "not-required") {
       completeness[bucket].converted += 1;
+      if (status === "not-required" || conversion.selection === "exact") {
+        completeness[bucket].verified += 1;
+      } else if (conversion.selection === "prior-observation") {
+        completeness[bucket].priorObservation += 1;
+      }
     }
   }
   return summary;
@@ -674,12 +759,15 @@ function convertedInrMetric(conversionSummary, key) {
   const completeness = conversionSummary.completeness?.[key] ?? {
     total: 0,
     converted: 0,
+    verified: 0,
+    priorObservation: 0,
   };
   if (!completeness.total) {
     return {
       value: "₹0",
       note: "No mapped rows",
       complete: true,
+      computed: true,
       empty: true,
     };
   }
@@ -688,44 +776,68 @@ function convertedInrMetric(conversionSummary, key) {
       value: "Rate needed",
       note: `${completeness.converted}/${completeness.total} rows converted`,
       complete: false,
+      computed: false,
       empty: false,
     };
   }
+  const verified = completeness.verified ?? completeness.converted;
+  const priorObservation = completeness.priorObservation ?? 0;
   return {
     value: `₹${formatNumber(conversionSummary.totalsInr?.[key] ?? 0)}`,
-    note: `${completeness.converted}/${completeness.total} exact-date rows`,
-    complete: true,
+    note: priorObservation
+      ? `${completeness.converted}/${completeness.total} computed · ${priorObservation} prior-observation row${priorObservation === 1 ? "" : "s"} to verify`
+      : `${verified}/${completeness.total} source-date rows verified`,
+    complete: verified === completeness.total,
+    computed: true,
     empty: false,
   };
 }
 
 function sourceHoldingsMetric(schedules) {
-  const positions = schedules?.fa ?? [];
-  if (positions.length === 0) {
+  const holdings = schedules?.holdings ?? [];
+  const summary = state.review?.faConversionSummary?.holdings;
+  if (holdings.length === 0) {
     return {
       value: "₹0",
       note: "No mapped positions",
       complete: true,
+      computed: true,
     };
   }
 
   const currencies = [
     ...new Set(
-      positions
-        .map((position) => String(position.currency ?? "").trim().toUpperCase())
+      holdings
+        .map((holding) => String(holding.currency ?? "").trim().toUpperCase())
         .filter(Boolean),
     ),
   ];
+  if (summary?.total && summary.converted === summary.total) {
+    const verified = summary.verified ?? summary.converted;
+    const priorObservation = summary.priorObservation ?? 0;
+    return {
+      value: `₹${formatNumber(summary.amountInr ?? 0)}`,
+      note: priorObservation
+        ? `${summary.converted}/${summary.total} computed · ${priorObservation} prior-observation row${priorObservation === 1 ? "" : "s"} to verify`
+        : `${verified}/${summary.total} latest holding rows verified`,
+      complete: verified === summary.total,
+      computed: true,
+    };
+  }
   if (currencies.length !== 1) {
     return {
-      value: `${positions.length} positions`,
-      note: "Mixed currencies · Schedule FA review",
+      value: `${holdings.length} positions`,
+      note: "Mixed currencies · latest holding snapshot review",
       complete: false,
+      computed: false,
     };
   }
 
-  const total = positions.reduce(
-    (sum, position) => sum + (Number(position.value) || 0),
+  const total = holdings.reduce(
+    (sum, holding) => {
+      const value = Number(holding.value);
+      return sum + (Number.isFinite(value) ? value : 0);
+    },
     0,
   );
   const [currency] = currencies;
@@ -733,9 +845,10 @@ function sourceHoldingsMetric(schedules) {
     value: currency === "INR" ? `₹${formatNumber(total)}` : `${currency} ${formatNumber(total)}`,
     note:
       currency === "INR"
-        ? "Source closing value"
-        : "Source closing value · FA FX review",
+        ? "Latest source holding snapshot"
+        : `${summary?.converted ?? 0}/${summary?.total ?? holdings.length} latest holding rows converted`,
     complete: currency === "INR",
+    computed: currency === "INR",
   };
 }
 
@@ -761,7 +874,7 @@ function renderReviewHeadline() {
       ["Dividends", "—", "Exact-date INR preview"],
       ["Interest", "—", "Exact-date INR preview"],
       ["Foreign tax paid", "—", "Rule 128 conversion preview"],
-      ["FTC candidate", "—", "Eligibility is not computed"],
+      ["FTC candidate", "—", "Tax summary relief placeholder"],
       ["Holdings", "—", "Source closing value"],
     ]
       .map(([label, value, note]) =>
@@ -773,6 +886,7 @@ function renderReviewHeadline() {
 
   const schedules = state.review.schedules ?? {};
   const conversionSummary = getConversionSummary();
+  const taxSummary = getTaxSummary();
   const capitalGains = convertedInrMetric(conversionSummary, "capitalGains");
   const dividends = convertedInrMetric(conversionSummary, "dividends");
   const interest = convertedInrMetric(conversionSummary, "interest");
@@ -780,23 +894,43 @@ function renderReviewHeadline() {
   const holdings = sourceHoldingsMetric(schedules);
   const hasCapitalGainRows = (schedules.capitalGains?.length ?? 0) > 0;
   const capitalGainNote = hasCapitalGainRows
-    ? capitalGains.complete
-      ? `${capitalGains.value} total source P/L · unclassified`
-      : "Total source P/L needs an exact rate"
+    ? capitalGains.computed
+      ? capitalGains.complete
+        ? "Computed FIFO gain converted at the transfer Rule 115 date"
+        : `Computed FIFO gain shown · ${capitalGains.note}`
+      : "Computed FIFO gain needs a usable prescribed-date observation"
     : "No disposal rows";
+  const taxSummaryComplete = taxSummary?.coverage?.complete ?? false;
+  const taxSummaryEvidenceReady = taxSummary?.coverage?.evidenceReady ?? false;
+  const stcgTotal = taxSummary?.totals?.stcg ?? 0;
+  const ltcgTotal = taxSummary?.totals?.ltcg ?? 0;
 
   elements.reviewHeadline.innerHTML = [
     {
       label: "STCG",
-      value: hasCapitalGainRows ? "Review" : "₹0",
+      value: hasCapitalGainRows
+        ? capitalGains.computed
+          ? `₹${formatNumber(stcgTotal)}`
+          : "Rate needed"
+        : "₹0",
       note: capitalGainNote,
-      warning: hasCapitalGainRows,
+      warning: hasCapitalGainRows && !capitalGains.complete,
     },
     {
       label: "LTCG",
-      value: hasCapitalGainRows ? "Review" : "₹0",
-      note: hasCapitalGainRows ? "Holding period and lot matching not inferred" : "No disposal rows",
-      warning: hasCapitalGainRows,
+      value: hasCapitalGainRows
+        ? capitalGains.computed
+          ? `₹${formatNumber(ltcgTotal)}`
+          : "Rate needed"
+        : "₹0",
+      note: hasCapitalGainRows
+        ? capitalGains.computed
+          ? capitalGains.complete
+            ? "Holding-period buckets are inferred by FIFO."
+            : `Holding-period bucket shown · ${capitalGains.note}`
+          : "Bucketed gains require a usable prescribed-date observation"
+        : "No disposal rows",
+      warning: hasCapitalGainRows && !capitalGains.complete,
     },
     {
       label: "Dividends",
@@ -817,11 +951,18 @@ function renderReviewHeadline() {
       label: "FTC candidate",
       value: foreignTax.empty
         ? "₹0"
-        : foreignTax.complete
-          ? `Up to ${foreignTax.value}`
+        : taxSummaryComplete
+          ? `₹${formatNumber(taxSummary?.totals?.relief ?? 0)}`
           : "Review",
-      note: "Eligibility and per-country cap are not computed",
-      warning: !foreignTax.empty,
+      note: taxSummaryComplete
+        ? taxSummaryEvidenceReady
+          ? `Tax summary by country · ${taxSummary?.unclassifiedRows ? `${taxSummary.unclassifiedRows} unclassified row(s)` : "ready for review"}`
+          : `${taxSummary?.coverage?.priorObservationRows ?? 0} prior-observation row(s) require primary SBI evidence`
+        : `${taxSummary?.coverage?.convertedRows ?? 0}/${taxSummary?.coverage?.totalRows ?? 0} tax-summary rows converted`,
+      warning:
+        !taxSummaryComplete ||
+        !taxSummaryEvidenceReady ||
+        (taxSummary?.totals?.relief ?? 0) > 0,
     },
     {
       label: "Holdings",
@@ -874,6 +1015,7 @@ function renderAuditTab() {
   const config = getConfig();
   const rateReference = review.referenceData?.usdTtBuyRates ?? {};
   const companyReference = review.referenceData?.companyLookup ?? {};
+  const fifoAudit = review.stats?.fifo ?? {};
   const sourceItems = [
     { label: "Files", value: summary.files ?? 0, note: "Names hidden here" },
     { label: "Data rows received", value: summary.dataRowsReceived ?? 0 },
@@ -887,11 +1029,33 @@ function renderAuditTab() {
     { label: "Buy trades", value: summary.buyTrades ?? 0 },
     { label: "Disposal trades", value: summary.saleTrades ?? 0 },
     { label: "Instruments", value: summary.instruments ?? 0 },
-    { label: "Dividends", value: summary.dividends ?? 0 },
-    { label: "WHT rows", value: summary.withholding ?? 0 },
+    {
+      label: "Dividends",
+      value: summary.dividends ?? 0,
+      note:
+        Number(summary.rawDividends ?? 0) > Number(summary.dividends ?? 0)
+          ? `${formatNumber((summary.rawDividends ?? 0) - (summary.dividends ?? 0))} summary/invalid rows excluded`
+          : `${formatNumber(summary.rawDividends ?? summary.dividends ?? 0)} raw rows`,
+    },
+    {
+      label: "WHT rows",
+      value: summary.withholding ?? 0,
+      note:
+        Number(summary.rawWithholding ?? 0) > Number(summary.withholding ?? 0)
+          ? `${formatNumber((summary.rawWithholding ?? 0) - (summary.withholding ?? 0))} summary/reversal rows excluded`
+          : `${formatNumber(summary.rawWithholding ?? summary.withholding ?? 0)} raw rows`,
+    },
     { label: "Interest", value: summary.interest ?? 0 },
-    { label: "Positions", value: summary.positions ?? 0 },
-    { label: "Transfers", value: summary.transfers ?? 0 },
+    {
+      label: "Positions",
+      value: summary.positions ?? 0,
+      note:
+        Number(summary.rawPositions ?? 0) > Number(summary.positions ?? 0)
+          ? `${formatNumber(summary.rawPositions)} raw snapshots · latest statement selected`
+          : "Latest holding snapshot",
+    },
+    { label: "Security transfers", value: summary.transfers ?? 0 },
+    { label: "Cash movements", value: summary.cashMovements ?? 0 },
     {
       label: "Duplicates suppressed",
       value: summary.duplicateRowsSuppressed ?? 0,
@@ -901,10 +1065,15 @@ function renderAuditTab() {
     { label: "Capital gains rows", value: schedules.capitalGains?.length ?? 0 },
     { label: "FSI rows", value: schedules.fsi?.length ?? 0 },
     { label: "TR rows", value: schedules.tr?.length ?? 0 },
-    { label: "FA rows", value: schedules.fa?.length ?? 0 },
+    { label: "FA entities", value: summary.faEntities ?? schedules.fa?.length ?? 0 },
+    { label: "Latest holdings", value: schedules.holdings?.length ?? summary.positions ?? 0 },
     { label: "Conversion rows", value: conversionSummary.total ?? 0 },
-    { label: "Prescribed dates", value: conversionSummary.dates ?? 0 },
-    { label: "Exact rates matched", value: conversionSummary.matched ?? 0 },
+    { label: "Date buckets", value: conversionSummary.dateBucketCount ?? conversionSummary.dates ?? 0 },
+    {
+      label: "Distinct statutory dates",
+      value: conversionSummary.distinctSpecifiedDateCount ?? conversionSummary.dates ?? 0,
+    },
+    { label: "Matched conversion rows", value: conversionSummary.matched ?? 0 },
     { label: "Automated checks", value: validations.length },
   ];
   const reconciliationRows = [
@@ -912,7 +1081,17 @@ function renderAuditTab() {
       paper: "Capital gains",
       source: summary.saleTrades ?? 0,
       output: schedules.capitalGains?.length ?? 0,
-      note: "One draft row per disposal trade; no FIFO expansion.",
+      note: "One draft row per FIFO lot segment from disposal matching.",
+      status:
+        Number(fifoAudit.unmatchedQuantity ?? 0) > 0
+          ? "Review"
+          : Number(schedules.capitalGains?.length ?? 0) >
+              Number(summary.saleTrades ?? 0)
+            ? "Expected FIFO split"
+            : Number(schedules.capitalGains?.length ?? 0) ===
+                Number(summary.saleTrades ?? 0)
+              ? "Reconciled"
+              : "Review",
     },
     {
       paper: "FSI",
@@ -924,13 +1103,13 @@ function renderAuditTab() {
       paper: "TR",
       source: summary.withholding ?? 0,
       output: schedules.tr?.length ?? 0,
-      note: "Foreign withholding rows; eligibility is not decided.",
+      note: "Negative foreign withholding rows only; positive reversals are excluded from tax paid.",
     },
     {
       paper: "Schedule FA",
-      source: summary.positions ?? 0,
+      source: summary.faEntities ?? 0,
       output: schedules.fa?.length ?? 0,
-      note: "Open-position rows; peak and INR values remain for review.",
+      note: "One row per calendar-year security entity; latest holdings remain separate.",
     },
   ];
   const validationList = validations.length
@@ -956,7 +1135,7 @@ function renderAuditTab() {
   const methodology = [
     {
       label: "Rule 115",
-      text: "Supported categories use their prescribed calendar date. Exact-date lookup is used; no prior-business-day substitution is made.",
+      text: "Supported categories use their prescribed Rule 115 / Rule 128 dates. The statutory date is retained; if that calendar date is missing, latest on-or-before observations are flagged in the evidence ledger.",
     },
     {
       label: "Rule 128",
@@ -964,7 +1143,7 @@ function renderAuditTab() {
     },
     {
       label: "Capital gains",
-      text: "IBKR basis and realized P/L remain source references. Acquisition-date matching, FIFO lots, STCG/LTCG classification, and tax rates are not inferred.",
+      text: "FIFO lot matching is applied. The gain amount is converted at the transfer-date Rule 115 rate; it is not recomputed by converting buy and sell legs separately.",
     },
     {
       label: "FSI",
@@ -972,7 +1151,7 @@ function renderAuditTab() {
     },
     {
       label: "Schedule FA",
-      text: "Open positions become draft FA rows. Peak value and required INR conversion remain reviewer tasks.",
+      text: "Calendar-year position/trade/dividend evidence becomes one FA row per entity. Latest holding snapshots are selected separately for the holdings headline.",
     },
     {
       label: "Company matching",
@@ -1041,13 +1220,18 @@ function renderAuditTab() {
             <tbody>
               ${reconciliationRows
                 .map((row) => {
-                  const reconciled = Number(row.source) === Number(row.output);
+                  const status =
+                    row.status ??
+                    (Number(row.source) === Number(row.output)
+                      ? "Reconciled"
+                      : "Review");
+                  const reconciled = status !== "Review";
                   return `
                     <tr>
                       <th scope="row">${escapeHtml(row.paper)}</th>
                       <td>${escapeHtml(formatNumber(row.source))}</td>
                       <td>${escapeHtml(formatNumber(row.output))}</td>
-                      <td><span class="audit-status${reconciled ? " is-ready" : " is-review"}">${reconciled ? "Reconciled" : "Review"}</span></td>
+                      <td><span class="audit-status${reconciled ? " is-ready" : " is-review"}">${escapeHtml(status)}</span></td>
                       <td>${escapeHtml(row.note)}</td>
                     </tr>`;
                 })
@@ -1118,7 +1302,7 @@ function renderAuditTab() {
           <div><dt>Broker base currency</dt><dd>${escapeHtml(config.baseCurrency)}</dd></div>
           <div><dt>TTBR source</dt><dd>${escapeHtml(rateReference.provider ?? "—")} · ${escapeHtml(formatNumber(rateReference.records ?? 0))} rows</dd></div>
           <div><dt>Company source</dt><dd>${escapeHtml(companyReference.provider ?? "—")} · ${escapeHtml(formatNumber(companyReference.records ?? 0))} records</dd></div>
-          <div><dt>Conversion coverage</dt><dd>${escapeHtml(formatNumber(conversionSummary.matched ?? 0))}/${escapeHtml(formatNumber(conversionSummary.total ?? 0))} exact matches · ${escapeHtml(formatNumber(conversionSummary.missing ?? 0))} missing · ${escapeHtml(formatNumber(conversionSummary.ambiguous ?? 0))} ambiguous</dd></div>
+          <div><dt>Conversion coverage</dt><dd>${escapeHtml(formatNumber(conversionSummary.matched ?? 0))}/${escapeHtml(formatNumber(conversionSummary.total ?? 0))} matched rows · ${escapeHtml(formatNumber(conversionSummary.dateBucketCount ?? conversionSummary.dates ?? 0))} date buckets · ${escapeHtml(formatNumber(conversionSummary.distinctSpecifiedDateCount ?? 0))} distinct statutory dates</dd></div>
         </dl>
       </details>
     </section>`;
@@ -1138,7 +1322,8 @@ function renderConfigureConversionSummary() {
   result.innerHTML = `
     <div class="conversion-mini-grid" aria-label="Conversion coverage">
       <span><strong>${escapeHtml(String(summary.dates ?? ledger.length))}</strong> prescribed dates</span>
-      <span><strong>${escapeHtml(String(summary.matched ?? 0))}</strong> matched</span>
+      <span><strong>${escapeHtml(String(summary.distinctSpecifiedDateCount ?? 0))}</strong> distinct statutory dates</span>
+      <span><strong>${escapeHtml(String(summary.matched ?? 0))}</strong> matched rows</span>
       <span><strong>${escapeHtml(String(summary.missing ?? 0))}</strong> missing</span>
       <span><strong>${escapeHtml(String(summary.ambiguous ?? 0))}</strong> ambiguous</span>
     </div>
@@ -1148,6 +1333,7 @@ function renderConfigureConversionSummary() {
       { key: "specifiedDate", label: "Specified date" },
       { key: "dateRule", label: "Date rule" },
       { key: "status", label: "TTBR status" },
+      { key: "observation", label: "Observation used" },
       { key: "rate", label: "TTBR", format: "number" },
       { key: "amountInr", label: "INR total", format: "number" },
       { key: "candidateObservations", label: "Conflicting candidates" },
@@ -1173,7 +1359,7 @@ function renderReviewTab() {
         <div class="summary-block">
           <small>Capital gains · INR review</small>
           <strong>${escapeHtml(capitalGains.value)}</strong>
-          <span>${escapeHtml(capitalGains.note)} · STCG/LTCG not inferred</span>
+          <span>${escapeHtml(capitalGains.note)} · gain is FIFO-computed, not separate buy/sell leg FX</span>
         </div>
         <div class="summary-block">
           <small>Dividends · INR review</small>
@@ -1188,17 +1374,17 @@ function renderReviewTab() {
         <div class="summary-block">
           <small>Foreign tax · INR review</small>
           <strong>${escapeHtml(foreignTax.value)}</strong>
-          <span>${escapeHtml(foreignTax.note)} · FTC eligibility not computed</span>
+          <span>${escapeHtml(foreignTax.note)} · FTC summary shown below</span>
         </div>
         <div class="summary-block">
           <small>TTBR coverage</small>
           <strong>${escapeHtml(formatNumber(conversionSummary.matched ?? 0))}/${escapeHtml(formatNumber(conversionSummary.total ?? 0))}</strong>
-          <span>${escapeHtml(formatNumber(conversionSummary.missing ?? 0))} missing · ${escapeHtml(formatNumber(conversionSummary.ambiguous ?? 0))} ambiguous</span>
+          <span>matched rows · ${escapeHtml(formatNumber(conversionSummary.missing ?? 0))} missing · ${escapeHtml(formatNumber(conversionSummary.ambiguous ?? 0))} ambiguous</span>
         </div>
         <div class="summary-block">
-          <small>Prescribed dates</small>
-          <strong>${escapeHtml(formatNumber(conversionSummary.dates ?? conversionLedgerRows().length))}</strong>
-          <span>Exact-date ledger · no prior-business-day shift</span>
+          <small>Statutory dates</small>
+          <strong>${escapeHtml(formatNumber(conversionSummary.distinctSpecifiedDateCount ?? 0))}</strong>
+          <span>${escapeHtml(formatNumber(conversionSummary.dateBucketCount ?? conversionLedgerRows().length))} date buckets · prior observations shown explicitly</span>
         </div>
       </div>`;
     return;
@@ -1211,10 +1397,14 @@ function renderReviewTab() {
       { label: "Exchange", value: (row) => row.company?.exchange || "—" },
       { key: "date", label: "Transfer date" },
       { key: "currency", label: "CCY" },
+      { key: "acquisitionDate", label: "Acq date" },
+      { key: "holdingDays", label: "Holding days", format: "number" },
+      { key: "gainBucket", label: "Bucket" },
       { key: "quantitySold", label: "Qty", format: "number" },
       { key: "proceeds", label: "Proceeds", format: "number" },
       { key: "costBasis", label: "IBKR basis", format: "number" },
       { key: "realizedProfitLoss", label: "IBKR P/L", format: "number" },
+      { key: "gain", label: "Computed FIFO gain", format: "number" },
       { label: "Specified date", value: conversionSpecifiedDate },
       { label: "TTBR status", value: conversionStatusLabel },
       { label: "Rate", value: (row) => conversionFor(row).rate, format: "number" },
@@ -1225,6 +1415,32 @@ function renderReviewTab() {
   }
 
   if (state.reviewTab === "fsi") {
+    const taxSummary = getTaxSummary();
+    const countrySummary = taxSummary?.rows?.length
+      ? `
+        <div class="reference-table-note">
+          <strong>${taxSummary.coverage.complete ? "Country-wise FTC preview" : "Incomplete country-wise FTC preview"}</strong>
+          <span>${taxSummary.coverage.complete
+            ? taxSummary.coverage.evidenceReady
+              ? "Relief is capped at the lower of foreign tax paid and preview Indian tax for each country."
+              : `Arithmetic includes ${taxSummary.coverage.priorObservationRows} prior-observation row(s); verify primary SBI evidence before relying on the FTC preview.`
+            : `${taxSummary.coverage.convertedRows}/${taxSummary.coverage.totalRows} rows converted; missing rows are excluded from the visible subtotals and the FTC figure remains Review.`}</span>
+        </div>
+        ${renderTable(taxSummary.rows, [
+          { key: "country", label: "Country" },
+          { key: "stcg", label: "STCG INR", format: "number" },
+          { key: "ltcg", label: "LTCG INR", format: "number" },
+          { key: "dividends", label: "Dividends INR", format: "number" },
+          { key: "interest", label: "Interest INR", format: "number" },
+          { key: "foreignTax", label: "Tax paid INR", format: "number" },
+          { key: "indianTax", label: "Indian tax cap", format: "number" },
+          { key: "relief", label: "FTC candidate", format: "number" },
+          { key: "conversionComplete", label: "Conversion complete" },
+          { key: "evidenceReady", label: "Evidence ready" },
+          { key: "dtaaSection", label: "Section" },
+          { key: "form67Required", label: "Form 67" },
+        ], { limit: false })}`
+      : '<div class="empty-review">No converted country-wise FTC summary is available yet.</div>';
     const income = schedules.fsi.map((row) => ({ ...row, workingPaper: "FSI" }));
     const relief = schedules.tr.map((row) => ({
       ...row,
@@ -1232,7 +1448,7 @@ function renderReviewTab() {
       amount: row.taxPaid,
       workingPaper: "TR",
     }));
-    elements.reviewContent.innerHTML = renderTable([...income, ...relief], [
+    elements.reviewContent.innerHTML = `${countrySummary}${renderTable([...income, ...relief], [
       { key: "workingPaper", label: "Paper" },
       { key: "incomeType", label: "Type" },
       { label: "Company", value: (row) => row.company?.name || "Unmatched" },
@@ -1245,7 +1461,7 @@ function renderReviewTab() {
       { label: "Rate", value: (row) => conversionFor(row).rate, format: "number" },
       { label: "FCY amount", value: (row) => conversionFcy(row, "amount"), format: "number" },
       { label: "INR amount", value: conversionInr, format: "number" },
-    ]);
+    ])}`;
     return;
   }
 
@@ -1254,7 +1470,7 @@ function renderReviewTab() {
     elements.reviewContent.innerHTML = `
       <div class="reference-table-note">
         <strong>Rule 115 / TTBR prescribed-date ledger</strong>
-        <span>Derived from applicable schedule rows. Exact-date status is reported without fallback.</span>
+        <span>Derived from schedule rows. Exact-date derivation is primary; prior-observation selections are explicitly shown.</span>
         <a href="./data/sbi-usd-tt-buy-community.csv" download>Download the complete CSV</a>
       </div>
       ${renderPreviewTable(rows, [
@@ -1264,6 +1480,7 @@ function renderReviewTab() {
         { key: "specifiedDate", label: "Specified date" },
         { key: "dateRule", label: "Date rule" },
         { key: "status", label: "TTBR status" },
+        { key: "observation", label: "Observation used" },
         { key: "rate", label: "TTBR", format: "number" },
         { key: "fcyRows", label: "Rows", format: "number" },
         { key: "amountForeign", label: "FCY total", format: "number" },
@@ -1291,7 +1508,19 @@ function renderReviewTab() {
       { label: "Exchange", value: (row) => row.company?.exchange || "—" },
       { key: "currency", label: "CCY" },
       { key: "quantity", label: "Quantity", format: "number" },
-      { key: "value", label: "Closing value", format: "number" },
+      { key: "acquisitionDate", label: "Acq date" },
+      { key: "acquisitionStatus", label: "Acq status" },
+      { key: "initialValue", label: "Initial value", format: "number" },
+      { key: "initialValueInr", label: "Initial INR", format: "number" },
+      { key: "peakDate", label: "Peak date" },
+      { key: "peakValue", label: "Peak value", format: "number" },
+      { key: "peakValueInr", label: "Peak INR", format: "number" },
+      { key: "closingDate", label: "Closing date" },
+      { key: "closingValue", label: "Closing value", format: "number" },
+      { key: "closingValueInr", label: "Closing INR", format: "number" },
+      { key: "closingStatus", label: "Closing status" },
+      { key: "grossProceeds", label: "Gross proceeds", format: "number" },
+      { key: "grossDividends", label: "Gross dividends", format: "number" },
       { key: "needsFx", label: "FX status" },
     ]);
     return;
@@ -1396,6 +1625,9 @@ function downloadBlob(name, type, body) {
 }
 
 function reportTable(title, rows) {
+  if (!Array.isArray(rows)) {
+    rows = rows && typeof rows === "object" ? [rows] : [];
+  }
   if (!rows.length) return `<h2>${escapeHtml(title)}</h2><p>No mapped rows.</p>`;
   const columns = [...new Set(rows.flatMap((row) => Object.keys(row)))];
   const header = columns.map((column) => `<th>${escapeHtml(humanizeKey(column))}</th>`).join("");
@@ -1443,6 +1675,7 @@ function makeReport() {
   }));
   const sourceLabel = state.sourceKind === "demo" ? "Synthetic demo" : "User-selected local statements";
   const conversionSummary = getConversionSummary();
+  const taxSummary = getTaxSummary();
 
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>OpenTax Ledger CA Review</title>
@@ -1457,10 +1690,32 @@ body{font-family:Arial,sans-serif;color:#171512;margin:40px;line-height:1.45}h1,
 <div><small>Residential status</small>${escapeHtml(config.residentialStatus)}</div>
 <div><small>Return assumption</small>${escapeHtml(config.returnForm)}</div>
 </div>
+${reportTable("Computed tax summary (rows)", taxSummary?.rows ?? [])}
+${reportTable("Computed tax summary totals", [{
+  stcg: taxSummary?.totals?.stcg,
+  ltcg: taxSummary?.totals?.ltcg,
+  dividends: taxSummary?.totals?.dividends,
+  interest: taxSummary?.totals?.interest,
+  foreignTax: taxSummary?.totals?.foreignTax,
+  foreignIncome: taxSummary?.totals?.foreignIncome,
+  indianTax: taxSummary?.totals?.indianTax,
+  relief: taxSummary?.totals?.relief,
+  form67Required: taxSummary?.form67Required,
+  dtaaSection: taxSummary?.rows?.[0]?.dtaaSection,
+  unclassifiedRows: taxSummary?.unclassifiedRows,
+  conversionRows: taxSummary?.coverage?.totalRows,
+  convertedRows: taxSummary?.coverage?.convertedRows,
+  missingConversionRows: taxSummary?.coverage?.missingRows,
+  verifiedRows: taxSummary?.coverage?.verifiedRows,
+  priorObservationRows: taxSummary?.coverage?.priorObservationRows,
+  conversionComplete: taxSummary?.coverage?.complete,
+  evidenceReady: taxSummary?.coverage?.evidenceReady,
+}])}
 ${reportTable("Capital Gains working table", review.schedules.capitalGains.map(flattenCompany))}
 ${reportTable("Schedule FSI working table", review.schedules.fsi.map(flattenCompany))}
 ${reportTable("Schedule TR working table", review.schedules.tr.map(flattenCompany))}
 ${reportTable("Schedule FA working table", review.schedules.fa.map(flattenCompany))}
+${reportTable("Latest holdings snapshot", (review.schedules.holdings ?? []).map(flattenCompany))}
 ${reportTable("Rule 115 / TTBR conversion summary", [
   {
     total: conversionSummary.total,
@@ -1469,13 +1724,15 @@ ${reportTable("Rule 115 / TTBR conversion summary", [
     ambiguous: conversionSummary.ambiguous,
     unsupported: conversionSummary.unsupported,
     notRequired: conversionSummary.notRequired,
-    prescribedDates: conversionSummary.dates,
+    dateBuckets: conversionSummary.dateBucketCount ?? conversionSummary.dates,
+    distinctStatutoryDates: conversionSummary.distinctSpecifiedDateCount,
     capitalGainsInr: conversionSummary.totalsInr?.capitalGains,
     dividendsInr: conversionSummary.totalsInr?.dividends,
     interestInr: conversionSummary.totalsInr?.interest,
     foreignTaxInr: conversionSummary.totalsInr?.foreignTax,
   },
 ])}
+${reportTable("Schedule FA conversion summary", [review.faConversionSummary ?? {}])}
 ${reportTable("Rule 115 / TTBR prescribed-date ledger", conversionLedgerRows())}
 ${reportTable("Reference-data provenance", [
   review.referenceData.usdTtBuyRates,
@@ -1515,6 +1772,7 @@ function exportJson() {
     referenceData,
   } = state.review;
   const conversionSummary = getConversionSummary();
+  const taxSummary = getTaxSummary();
   downloadBlob(
     "opentax-ledger-audit.json",
     "application/json;charset=utf-8",
@@ -1538,6 +1796,8 @@ function exportJson() {
           checklist,
           referenceData,
           conversionSummary,
+          faConversionSummary: state.review.faConversionSummary,
+          taxSummary,
           conversionLedger: conversionLedgerRows(),
         },
       },
@@ -1556,6 +1816,7 @@ function exportCsv() {
     ["FSI", state.review.schedules.fsi.map(flattenCompany)],
     ["TR", state.review.schedules.tr.map(flattenCompany)],
     ["FA", state.review.schedules.fa.map(flattenCompany)],
+    ["Latest Holdings", (state.review.schedules.holdings ?? []).map(flattenCompany)],
   ];
   const columns = [
     "schedule",
@@ -1574,6 +1835,8 @@ function exportCsv() {
 
 function resetSession() {
   state.files = [];
+  state.parsed = null;
+  state.baseReview = null;
   state.review = null;
   invalidateReviewConfirmation();
   state.sourceKind = null;
@@ -1616,8 +1879,7 @@ elements.fileInput.addEventListener("change", () => {
 elements.rateFileInput.addEventListener("change", importRateFile);
 document.querySelectorAll("[data-config]").forEach((input) => {
   input.addEventListener("change", () => {
-    invalidateReviewConfirmation();
-    renderReview();
+    rebuildReviewFromBase();
   });
 });
 

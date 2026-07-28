@@ -2852,3 +2852,22 @@ summary:focus-visible {
     transition-duration: 0.001ms !important;
   }
 }
+
+.frame-block {
+  margin: 12vh auto;
+  max-width: 640px;
+  padding: 32px;
+  text-align: center;
+}
+
+.frame-block h1 {
+  font-family: var(--serif);
+  font-size: clamp(32px, 6vw, 54px);
+  line-height: 1;
+}
+
+.frame-block p {
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.6;
+}

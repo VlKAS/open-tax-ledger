@@ -10,7 +10,13 @@ is available today.
   and checks.
 - Scope limited to supported equity and ETF flows.
 - Automatic Rule 115 and Rule 128 date derivation for supported USD income and
-  foreign-tax rows, with exact-date INR previews and no prior-day fallback.
+  foreign-tax rows, with visible prescribed dates and labelled TTBR evidence
+  statuses.
+- FIFO lot matching for supported equity and ETF disposals, including STCG/LTCG
+  ageing based on matched holding periods.
+- Country-wise draft FTC candidates at the user marginal rate.
+- Schedule FA entity grouping, latest-statement holdings, and evidence labels
+  for snapshot-limited peak/closing values.
 - A mandatory review dashboard before local downloads.
 - Offline SEC company metadata enrichment with source provenance.
 - GitHub Pages deployment workflow.
@@ -19,8 +25,8 @@ is available today.
 ## Near-Term
 
 - Stronger CSV schema detection for IBKR custom statements.
-- More reconciliation checks for cash, positions, dividends, and withholding
-  tax.
+- More reconciliation checks for cash, positions, dividends, withholding tax,
+  and Schedule FA evidence completeness.
 - Deterministic export format for CA review.
 - Fixture library covering common equity and ETF cases.
 - UI copy that consistently marks outputs as draft working papers.
@@ -32,6 +38,8 @@ is available today.
 - Expanded corporate-action handling after test fixtures exist.
 - Broader assessment-year fixtures for specified-date and rate-evidence audit
   output.
+- Optional user-supplied market-value evidence import for stronger Schedule FA
+  peak/closing support.
 - Better import diagnostics for unsupported IBKR sections.
 
 ## Later

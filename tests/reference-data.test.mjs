@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   enrichReviewWithReferenceData,
   lookupUsdTtBuyRate,
+  lookupUsdTtBuyRateOnOrBefore,
   parseSbiReferenceRatesCsv,
   parseSecCompanyTickersExchange,
 } from "../lib/reference-data.js";
@@ -88,6 +89,70 @@ test("lookupUsdTtBuyRate performs exact-date matching without nearest-day fallba
     sourceUrl: "",
   });
   assert.equal(lookupUsdTtBuyRate(table, "not-a-date").status, "invalid-date");
+});
+
+test("lookupUsdTtBuyRateOnOrBefore uses latest prior observation within the allowed window", () => {
+  const table = parseSbiReferenceRatesCsv(
+    [
+      "DATE,TT BUY,source url",
+      "2025-08-25,86.5,https://example.test/old.pdf",
+      "2025-08-29,87.11,https://example.test/friday.pdf",
+      "2025-09-01,87.2,https://example.test/monday.pdf",
+    ].join("\n"),
+  );
+
+  assert.deepEqual(lookupUsdTtBuyRateOnOrBefore(table, "2025-08-31"), {
+    status: "matched",
+    date: "2025-08-31",
+    specifiedDate: "2025-08-31",
+    observationDate: "2025-08-29",
+    selection: "prior-observation",
+    daysPrior: 2,
+    currency: "USD",
+    rate: 87.11,
+    sourceUrl: "https://example.test/friday.pdf",
+  });
+  assert.equal(
+    lookupUsdTtBuyRateOnOrBefore(table, "2025-08-31", { maxDays: 1 }).status,
+    "missing",
+  );
+  assert.deepEqual(lookupUsdTtBuyRate(table, "2025-08-31"), {
+    status: "missing",
+    date: "2025-08-31",
+    currency: "USD",
+    rate: null,
+    sourceUrl: "",
+  });
+});
+
+test("lookupUsdTtBuyRateOnOrBefore reports ambiguity on the selected observation date", () => {
+  const table = parseSbiReferenceRatesCsv(
+    [
+      "DATE,TT BUY,source url",
+      "2025-08-29 09:00,87.11,https://example.test/morning.pdf",
+      "2025-08-29 15:00,87.12,https://example.test/afternoon.pdf",
+      "2025-08-28,86.9,https://example.test/older.pdf",
+    ].join("\n"),
+  );
+
+  const result = lookupUsdTtBuyRateOnOrBefore(table, "2025-08-31");
+  assert.equal(result.status, "ambiguous");
+  assert.equal(result.specifiedDate, "2025-08-31");
+  assert.equal(result.observationDate, "2025-08-29");
+  assert.equal(result.selection, "prior-observation");
+  assert.equal(result.daysPrior, 2);
+  assert.deepEqual(result.observations, [
+    {
+      timestamp: "2025-08-29 09:00",
+      rate: 87.11,
+      sourceUrl: "https://example.test/morning.pdf",
+    },
+    {
+      timestamp: "2025-08-29 15:00",
+      rate: 87.12,
+      sourceUrl: "https://example.test/afternoon.pdf",
+    },
+  ]);
 });
 
 test("parseSecCompanyTickersExchange builds a local ticker lookup and marks ambiguity", () => {
@@ -260,6 +325,9 @@ test("reference enrichment derives exact Rule 115 and Rule 128 dates and INR pre
       rate: 90,
       sourceUrl: "https://example.test/2025-12-31.pdf",
       observations: [],
+      observationDate: "2025-12-31",
+      selection: "exact",
+      daysPrior: 0,
       currency: "USD",
       amountForeign: 149,
       amountInr: 13_410,
@@ -272,23 +340,37 @@ test("reference enrichment derives exact Rule 115 and Rule 128 dates and INR pre
   assert.equal(enriched.schedules.fsi[1].conversion.amountInr, 115);
   assert.equal(enriched.schedules.fsi[1].conversion.classificationReview, true);
   assert.equal(enriched.schedules.tr[0].conversion.authority, "Rule 128(5)(ii)");
-  assert.equal(enriched.schedules.tr[0].conversion.amountInr, 322.5);
+  assert.equal(enriched.schedules.tr[0].conversion.amountInr, 323);
   assert.equal(enriched.conversionSummary.total, 4);
+  assert.equal(enriched.conversionSummary.totalRows, 4);
+  assert.equal(enriched.conversionSummary.conversionRows, 4);
   assert.equal(enriched.conversionSummary.matched, 4);
+  assert.equal(enriched.conversionSummary.matchedRows, 4);
+  assert.equal(enriched.conversionSummary.exactMatchedRows, 4);
+  assert.equal(enriched.conversionSummary.priorObservationRows, 0);
   assert.equal(enriched.conversionSummary.missing, 0);
   assert.deepEqual(enriched.conversionSummary.totalsInr, {
     capitalGains: 13_410,
     dividends: 1_075,
     interest: 115,
-    foreignTax: 322.5,
+    foreignTax: 323,
   });
   assert.deepEqual(enriched.conversionSummary.completeness, {
-    capitalGains: { total: 1, converted: 1 },
-    dividends: { total: 1, converted: 1 },
-    interest: { total: 1, converted: 1 },
-    foreignTax: { total: 1, converted: 1 },
+    capitalGains: { total: 1, converted: 1, verified: 1, priorObservation: 0 },
+    dividends: { total: 1, converted: 1, verified: 1, priorObservation: 0 },
+    interest: { total: 1, converted: 1, verified: 1, priorObservation: 0 },
+    foreignTax: { total: 1, converted: 1, verified: 1, priorObservation: 0 },
   });
   assert.equal(enriched.conversionSummary.dates, 4);
+  assert.equal(enriched.conversionSummary.dateBucketCount, 4);
+  assert.equal(enriched.conversionSummary.matchedDateBucketCount, 4);
+  assert.equal(enriched.conversionSummary.priorObservationDateBucketCount, 0);
+  assert.equal(enriched.conversionSummary.distinctSpecifiedDateCount, 3);
+  assert.deepEqual(enriched.conversionSummary.specifiedDates, [
+    "2025-07-31",
+    "2025-12-31",
+    "2026-03-31",
+  ]);
   assert.equal(enriched.conversionSummary.dateLedger.length, 4);
   assert.ok(
     enriched.validations.some(
@@ -311,7 +393,7 @@ test("reference enrichment derives exact Rule 115 and Rule 128 dates and INR pre
   );
 });
 
-test("automatic conversion never substitutes a prior business day", () => {
+test("automatic conversion uses a prior observation for a weekend statutory date", () => {
   const review = {
     schedules: {
       capitalGains: [
@@ -338,13 +420,143 @@ test("automatic conversion never substitutes a prior business day", () => {
   });
 
   assert.equal(enriched.schedules.capitalGains[0].conversion.specifiedDate, "2025-08-31");
-  assert.equal(enriched.schedules.capitalGains[0].conversion.status, "missing");
-  assert.equal(enriched.schedules.capitalGains[0].conversion.amountInr, null);
+  assert.equal(enriched.schedules.capitalGains[0].conversion.status, "matched");
+  assert.equal(enriched.schedules.capitalGains[0].conversion.observationDate, "2025-08-29");
+  assert.equal(enriched.schedules.capitalGains[0].conversion.selection, "prior-observation");
+  assert.equal(enriched.schedules.capitalGains[0].conversion.daysPrior, 2);
+  assert.equal(enriched.schedules.capitalGains[0].conversion.amountInr, 8_711);
+  assert.equal(enriched.schedules.capitalGains[0].conversion.exactDateOnly, false);
+  assert.equal(enriched.conversionSummary.exactMatchedRows, 0);
+  assert.equal(enriched.conversionSummary.priorObservationRows, 1);
+  assert.equal(enriched.conversionSummary.priorObservationDateBucketCount, 1);
+  assert.deepEqual(enriched.conversionSummary.completeness.capitalGains, {
+    total: 1,
+    converted: 1,
+    verified: 0,
+    priorObservation: 1,
+  });
   assert.ok(
     enriched.validations.some(
-      (validation) => validation.code === "RULE_RATE_EVIDENCE_MISSING",
+      (validation) => validation.code === "PRIOR_OBSERVATION_RATE_USED",
     ),
   );
+});
+
+test("capital gains convert the net FIFO gain and Schedule FA values retain their own value dates", () => {
+  const review = {
+    schedules: {
+      capitalGains: [
+        {
+          symbol: "ALFA",
+          acquisitionDate: "2025-08-25",
+          saleDate: "2025-11-25",
+          date: "2025-11-25",
+          currency: "USD",
+          gain: -0.68,
+          realizedProfitLoss: -0.68,
+          gainBucket: "STCG",
+        },
+      ],
+      fsi: [],
+      tr: [],
+      fa: [
+        {
+          symbol: "ALFA",
+          currency: "USD",
+          acquisitionDate: "2025-08-25",
+          initialValue: 12.35,
+          peakDate: "2025-11-30",
+          peakValue: 15,
+          closingDate: "2025-12-31",
+          closingValue: 14,
+        },
+      ],
+      holdings: [
+        {
+          symbol: "ALFA",
+          currency: "USD",
+          snapshotDate: "2025-12-31",
+          value: 14,
+        },
+      ],
+    },
+    validations: [],
+  };
+  const rates = parseSbiReferenceRatesCsv(
+    [
+      "DATE,TT BUY",
+      "2025-08-25,87.15",
+      "2025-10-31,88.2",
+      "2025-11-29,88.95",
+      "2025-12-31,89.47",
+    ].join("\n"),
+  );
+
+  const enriched = enrichReviewWithReferenceData(review, {
+    usdTtBuyRates: rates,
+    companyLookup: {},
+  });
+
+  assert.equal(enriched.schedules.capitalGains[0].conversion.amountForeign, -0.68);
+  assert.equal(enriched.schedules.capitalGains[0].conversion.specifiedDate, "2025-10-31");
+  assert.equal(enriched.schedules.capitalGains[0].conversion.amountInr, -60);
+  assert.equal(enriched.schedules.fa[0].initialValueInr, 1_076);
+  assert.equal(enriched.schedules.fa[0].peakValueInr, 1_334);
+  assert.equal(enriched.schedules.fa[0].valueConversions.peak.observationDate, "2025-11-29");
+  assert.equal(enriched.schedules.fa[0].closingValueInr, 1_253);
+  assert.equal(enriched.schedules.holdings[0].valueInr, 1_253);
+  assert.deepEqual(enriched.faConversionSummary.holdings, {
+    total: 1,
+    converted: 1,
+    verified: 1,
+    priorObservation: 0,
+    amountInr: 1_253,
+  });
+  assert.ok(
+    enriched.validations.some(
+      (validation) => validation.code === "PRIOR_OBSERVATION_RATE_USED",
+    ),
+  );
+});
+
+test("missing Schedule FA source values remain missing instead of becoming zero", () => {
+  const enriched = enrichReviewWithReferenceData(
+    {
+      schedules: {
+        capitalGains: [],
+        fsi: [],
+        tr: [],
+        fa: [
+          {
+            symbol: "ALFA",
+            currency: "USD",
+            acquisitionDate: "2025-08-25",
+            initialValue: null,
+            peakDate: "2025-11-30",
+            peakValue: null,
+            closingDate: "2025-12-31",
+            closingValue: null,
+          },
+        ],
+        holdings: [],
+      },
+      validations: [],
+    },
+    {
+      usdTtBuyRates: parseSbiReferenceRatesCsv(
+        "DATE,TT BUY\n2025-08-25,87.15\n2025-11-29,88.95\n2025-12-31,89.47",
+      ),
+      companyLookup: {},
+    },
+  );
+
+  const conversions = enriched.schedules.fa[0].valueConversions;
+  assert.equal(conversions.initial.status, "missing-value");
+  assert.equal(conversions.peak.status, "missing-value");
+  assert.equal(conversions.closing.status, "missing-value");
+  assert.equal(enriched.schedules.fa[0].initialValueInr, null);
+  assert.equal(enriched.schedules.fa[0].peakValueInr, null);
+  assert.equal(enriched.schedules.fa[0].closingValueInr, null);
 });
 
 test("ambiguous exact-date observations remain visible and unconverted", () => {
@@ -381,6 +593,9 @@ test("ambiguous exact-date observations remain visible and unconverted", () => {
   assert.equal(conversion.specifiedDate, "2025-01-31");
   assert.equal(conversion.status, "ambiguous");
   assert.equal(conversion.amountInr, null);
+  assert.equal(conversion.observationDate, "2025-01-31");
+  assert.equal(conversion.selection, "exact");
+  assert.equal(conversion.daysPrior, 0);
   assert.deepEqual(conversion.observations, [
     {
       timestamp: "2025-01-31 09:00",
@@ -399,6 +614,36 @@ test("ambiguous exact-date observations remain visible and unconverted", () => {
       (validation) => validation.code === "RULE_RATE_EVIDENCE_MISSING",
     ),
   );
+});
+
+test("capital-gains conversion uses the computed net FIFO gain", () => {
+  const review = {
+    schedules: {
+      capitalGains: [
+        {
+          symbol: "AAPL",
+          date: "2026-01-15",
+          currency: "USD",
+          realizedProfitLoss: 149,
+          gain: 148.5,
+        },
+      ],
+      fsi: [],
+      tr: [],
+      fa: [],
+    },
+    validations: [],
+  };
+  const rates = parseSbiReferenceRatesCsv("DATE,TT BUY\n2025-12-31,90", {
+    sourceUrl: "https://example.test/2025-12-31.pdf",
+  });
+
+  const enriched = enrichReviewWithReferenceData(review, {
+    usdTtBuyRates: rates,
+    companyLookup: {},
+  });
+
+  assert.equal(enriched.schedules.capitalGains[0].conversion.amountInr, 13_365);
 });
 
 test("checked-in reference snapshots parse to the manifest-backed coverage", async () => {

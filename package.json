@@ -22,7 +22,7 @@
     "data:check": "node scripts/generate-reference-data.mjs --check",
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
-    "test": "node --test tests/parser.test.mjs tests/rule115.test.mjs tests/reference-data.test.mjs tests/reference-data-refresh.test.mjs tests/reference-refresh-workflow.test.mjs tests/pages-workflow.test.mjs",
+    "test": "node --test tests/parser.test.mjs tests/fifo.test.mjs tests/schedule-fa.test.mjs tests/tax-summary.test.mjs tests/rule115.test.mjs tests/reference-data.test.mjs tests/reference-data-refresh.test.mjs tests/reference-refresh-workflow.test.mjs tests/pages-workflow.test.mjs",
     "test:render": "npm run build && node --test tests/rendered-html.test.mjs tests/ui-ux.test.mjs",
     "check": "npm run data:check && npm run test && npm run test:render",
     "start": "node scripts/dev.mjs"

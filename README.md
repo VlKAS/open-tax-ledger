@@ -33,12 +33,13 @@ Aadhaar, connect to the Income Tax Department portal, or file a return.
 - 🧾 Creates draft Schedule CG, Schedule FA, Schedule FSI, and Schedule TR
   working papers.
 - 🔎 Shows reconciliation checks for missing FX, unsupported instruments,
-  transfers, duplicate rows, and review items.
+  broker cash movements, duplicate rows, and review items.
 - 🗓️ Derives supported Rule 115 and Rule 128 calendar dates automatically.
-- 🏦 Uses a pinned community USD TT BUY table for exact-date INR previews without
-  silently shifting weekends or holidays.
-- 📊 Summarizes draft gains, foreign income, foreign tax, FTC candidates, and
-  holdings while keeping unsupported STCG/LTCG classification visibly unresolved.
+- 🏦 Uses a pinned community USD TT BUY table for reviewable INR previews,
+  retaining the statutory date and showing when the latest published source
+  observation on or before that date was used.
+- 📊 Computes FIFO lot-matched capital-gain rows, STCG/LTCG ageing, foreign
+  income, country-wise FTC candidates, and latest-statement holdings.
 - 🧭 Adds an Audit tab with source/output row reconciliation, methodology,
   assumptions, provenance, and validation severity.
 - 👀 Requires a schedule-and-audit preview before local downloads.
@@ -52,8 +53,9 @@ Aadhaar, connect to the Income Tax Department portal, or file a return.
 Supported now:
 
 - Listed foreign equities and ETFs held through IBKR.
-- Stock trades, dividends, withholding tax, interest, open positions, transfers,
-  and optional exchange-rate sections recognized by the current parser.
+- Stock trades, dividends, withholding tax, interest, open positions, broker
+  cash movements, securities transfers, and optional exchange-rate sections
+  recognized by the current parser.
 - Browser-only import, review, and export.
 - Synthetic fixtures only in the repository and test suite.
 - Static deployment through the checked-in GitHub Pages workflow.
@@ -76,11 +78,14 @@ Not supported yet:
 3. Import the CSV in the browser.
 4. Confirm filing assumptions. The app derives supported Rule 115 specified
    dates and Rule 128 foreign-tax dates automatically.
-5. Review the headline summary, per-row INR preview, exact TT BUY match, and
-   unresolved checks. Use the Audit tab to reconcile accepted source rows
-   against generated CG, FSI, TR, and FA working-paper rows.
-6. Retain primary SBI evidence for material dates. The app does not apply a
-   prior-business-day fallback when the exact date is unavailable.
+5. Review the headline summary, FIFO lot rows, per-row INR preview, TT BUY
+   evidence status, country-wise FTC candidates, and unresolved checks. Use the
+   Audit tab to reconcile accepted source rows against generated CG, FSI, TR,
+   and FA working-paper rows.
+6. Retain primary SBI evidence for material dates. The app keeps the Rule 115
+   or Rule 128 prescribed date visible; if the community archive has no row on
+   that date, it may use the latest published observation on or before that date
+   within the configured review window and marks that evidence status.
 7. Export draft schedules and reconciliation checks.
 8. Share the exported working papers with a CA.
 9. Enter final CA-approved values in the official Income Tax Department utility
@@ -180,15 +185,33 @@ Important caveats:
 - SBI publishes a current mutable PDF, not an official historical CSV archive.
 - The bundled table is a convenience reference, not an official SBI-published
   historical feed.
-- Lookup is exact-date only. Missing dates and conflicting intraday observations
-  remain review items.
-- The app does not silently substitute RBI rates, broker rates, market rates, or
-  prior-business-day values.
+- The prescribed Rule 115 or Rule 128 date remains the calculation basis. The
+  app does not change that date to a statutory prior business day.
+- Rate evidence can be exact, prior-observation, missing, or ambiguous. A
+  prior-observation match means the bundled community archive had a published
+  source row on or before the prescribed date within the configured review
+  window.
+- The app does not substitute RBI rates, broker rates, market rates, or
+  unchecked vendor rates.
 - Supported USD capital-gain, dividend, other-source interest, and foreign-tax
-  rows receive a draft INR preview only when the derived calendar date has one
-  exact observation.
+  rows receive a draft INR preview only when the local evidence status is
+  usable.
 - IBKR Interest rows default to other-source interest and remain flagged for
   classification review.
+
+## 🧮 Calculation Model
+
+OpenTax Ledger aims for deterministic, audit-friendly drafts rather than hidden
+tax assumptions.
+
+| Area | Implemented behavior |
+| --- | --- |
+| Capital gains | Equity and ETF disposals are matched against earlier buy lots using FIFO. Earlier lots are retained even when the sale falls inside the selected financial year. Holding period over 730 days is marked LTCG; other supported disposals are marked STCG. Net foreign-currency gain is converted at the transfer-month prescribed Rule 115 date. |
+| Dividends | IBKR dividend payment rows are converted row by row. Summary rows without a real payment date are excluded from income totals and listed for audit. INR is rounded per row to whole rupees before totals are added. |
+| Withholding tax | Negative withholding rows are converted row by row. Positive WHT reversals and summary/no-date rows are excluded from tax-paid totals and listed for audit. INR is rounded per row to whole rupees before totals are added. |
+| FTC candidates | Foreign tax credit relief is grouped by country at the user-entered marginal rate. The draft relief is the lower of foreign tax paid and estimated Indian tax on that country income. Eligibility, treaty position, and Form 67 remain CA review items. |
+| Transfers | IBKR securities transfers are tracked separately from Deposits & Withdrawals cash movements. Cash deposits and withdrawals do not count as securities transfers or income. |
+| Schedule FA | The app groups calendar-year securities into Schedule FA entities, uses the latest imported statement snapshot for current holdings, and labels peak/closing values with evidence status. A latest holding without in-year evidence is retained as a review-only entity instead of being silently omitted. Snapshot-limited peaks are review items unless the taxpayer supplies stronger market-value evidence. |
 
 ### Company metadata
 

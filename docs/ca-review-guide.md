@@ -36,20 +36,29 @@ Expected draft outputs:
 3. Review unsupported instruments and excluded rows.
 4. Use the Audit tab to reconcile accepted source rows, duplicate suppression,
    generated CG/FSI/TR/FA rows, conversion coverage, and validation severity.
-5. Review realized gains, acquisition dates, disposal dates, quantities, and
-   source-row traceability. STCG/LTCG classification and lot matching are not
-   inferred by the app.
-6. Review dividend rows and withholding tax linkage. Treat the displayed FTC
-   amount as a candidate ceiling only; eligibility and per-country relief caps
-   are not computed.
+5. Review FIFO lot matching, realized gains, acquisition dates, disposal dates,
+   quantities, holding periods, and source-row traceability. The app marks
+   matched lots over 730 days as LTCG and other supported disposals as STCG, but
+   unsupported instruments and corporate actions remain manual review items.
+6. Review dividend rows and withholding tax linkage. Confirm that summary rows
+   without event dates and positive WHT reversals were excluded from income and
+   tax-paid totals. Treat the displayed FTC amount as a draft per-country
+   candidate only; eligibility, treaty position, and Form 67 filing remain
+   professional review items.
 7. Review the automatically derived Rule 115 specified dates and Rule 128
    foreign-tax dates, confirm the income classification and event date, and
-   retain primary SBI evidence. Do not treat a broker FX rate, a prior-day
+   retain primary SBI evidence. The app keeps the statutory prescribed date
+   visible and may use a prior published community-archive observation only as
+   labelled evidence. Do not treat a broker FX rate, an unlabelled prior-day
    fallback, or the bundled community table alone as final support.
 8. Compare foreign income and tax relief working papers against AIS/TIS/Form
    26AS and broker reports.
-9. Review Schedule FA asset/account disclosures against year-end and peak-value
-   evidence required for the applicable ITR utility.
+9. Review Schedule FA asset/account disclosures against calendar-year entity
+   grouping, latest imported statement holdings, and year-end/peak-value
+   evidence required for the applicable ITR utility. Snapshot-limited peak or
+   closing values require human evidence review. Resolve any review-only latest
+   holdings that lack an in-year snapshot before treating the FA list as
+   complete.
 10. Enter final reviewed values into the official utility or portal.
 
 Official ITR utilities are published by the Income Tax Department:
@@ -63,9 +72,11 @@ OpenTax Ledger intentionally does not decide:
 - Residential status.
 - Whether a taxpayer is eligible for foreign tax relief.
 - Treaty eligibility.
+- Whether draft FTC candidates satisfy Form 67 and treaty/documentation
+  requirements.
 - Characterization for unsupported instruments.
 - Treatment of ambiguous corporate actions.
-- Selection among missing or conflicting TT buying-rate observations.
+- Selection among missing, stale, or conflicting TT buying-rate observations.
 - Classification of IBKR Interest rows as other-source interest or interest on
   securities.
 - Issuer residence or treaty treatment from an SEC ticker match.

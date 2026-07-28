@@ -57,25 +57,39 @@ values remain a community archive derived from SBI-published evidence; that
 license does not make the table an official SBI source. OpenTax Ledger does not
 bundle SBI PDF files.
 
-For supported USD income rows, the app derives the statutory calendar date and
-uses the bundled table to create a draft INR preview only when one exact,
-unambiguous observation exists. It does not substitute RBI reference rates,
-OANDA rates, broker rates, other market FX rates, or a prior-business-day value
-when that observation is missing. Missing or ambiguous rate dates remain review
-items.
+For supported USD rows, the app derives the prescribed statutory calendar date
+and keeps that date visible in the audit output. It then uses the bundled table
+to create a draft INR preview when rate evidence is usable:
+
+- exact: one unambiguous observation exists on the prescribed date;
+- prior observation: no exact row exists, but the latest published source
+  observation on or before the prescribed date is within the configured review
+  window; or
+- review required: the observation is missing, stale, or ambiguous.
+
+The prior-observation status is not a statutory prior-business-day
+substitution. Rule 115 itself does not move a specified date that falls on a
+weekend or bank holiday. The app does not substitute RBI reference rates, OANDA
+rates, broker rates, other market FX rates, or unchecked vendor values when
+local evidence is missing.
 
 Date derivation follows the official rule text:
 
-- capital gains: last day of the month before the transfer month;
+- capital gains: last day of the month before the transfer month, applied to
+  the matched net foreign-currency gain;
 - dividends: last day of the month before the statement payment month;
 - broker cash interest treated as other-source interest: last day of the
   financial year, with classification flagged for review; and
 - foreign tax credit conversion: last day of the month before foreign tax was
   paid or deducted under Rule 128(5)(ii).
 
-Rule 115 itself does not move a specified date that falls on a weekend or bank
-holiday. The exact calendar date remains visible even when the local table has
-no observation for it.
+Income and tax conversions are rounded per row to whole rupees before schedule
+totals are added, so totals may differ from converting an aggregate foreign
+currency amount once.
+
+Capital-gain conversion uses the transfer prescribed date for the net
+foreign-currency gain. It does not separately convert the buy leg and sell leg
+for the draft Schedule CG gain.
 
 ## Company Metadata
 

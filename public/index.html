@@ -312,6 +312,24 @@
                   </select>
                   <small>IBKR conversions are not treated as Rule 115 evidence</small>
                 </label>
+                <label>
+                  <span>Assumed marginal tax rate (AY slab rate)</span>
+                  <select data-config="marginalTaxRate">
+                    <option value="31.2" selected>31.2% · 30% plus 4% cess</option>
+                    <option value="20.8">20.8% · 20% plus 4% cess</option>
+                    <option value="10.4">10.4% · 10% plus 4% cess</option>
+                    <option value="0">0% · compute manually</option>
+                  </select>
+                  <small>Used only to preview the per-country FTC cap</small>
+                </label>
+                <label>
+                  <span>DTAA section</span>
+                  <select data-config="dtaaSection">
+                    <option value="90" selected>Section 90 · treaty relief</option>
+                    <option value="91">Section 91 · unilateral relief</option>
+                  </select>
+                  <small>Used for FTC computation grouping</small>
+                </label>
               </div>
 
               <section class="reference-section" aria-labelledby="reference-data-title">
@@ -377,8 +395,9 @@
                     <h5>Automatic Rule 115 date summary</h5>
                     <p>
                       Dates are derived from reviewed schedule rows after reference
-                      enrichment. Exact-date TT buying status is shown as-is; no
-                      prior-business-day shift is applied.
+                      enrichment. The statutory date is retained; if that calendar
+                      date has no observation, the latest available SBI observation
+                      on or before it is used within the evidence window and shown.
                     </p>
                   </div>
                   <div class="rate-result" aria-live="polite">
@@ -405,8 +424,9 @@
                 <strong>Community data is not an official historical SBI feed</strong>
                 <p>
                   Rule 115 and Rule 26 point to SBI’s TT buying rate. Verify material
-                  dates against retained primary evidence. Exact matches populate
-                  draft INR previews; missing or conflicting evidence remains visible.
+                  dates against retained primary evidence. Matched row conversions
+                  populate draft INR previews; missing, prior-observation, or
+                  conflicting evidence remains visible.
                 </p>
               </div>
 
