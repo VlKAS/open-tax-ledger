@@ -17,6 +17,13 @@ test("workspace exposes direct, keyboard-focusable review actions", () => {
   assert.match(app, /focusWorkspaceStep\("export"\)/);
 });
 
+test("step navigation moves focus to the step that remains active after routing", () => {
+  assert.match(
+    app,
+    /const requestedStep = button\.dataset\.stepTarget \?\? button\.dataset\.goStep;[\s\S]*?selectStep\(requestedStep\);[\s\S]*?focusWorkspaceStep\(state\.currentStep\);/,
+  );
+});
+
 test("review rebuilds from source data when assumptions or rates change", () => {
   assert.match(html, /31\.2% · 30% plus 4% cess/);
   assert.match(html, /Section 90 · treaty relief/);

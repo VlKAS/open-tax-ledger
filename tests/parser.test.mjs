@@ -351,6 +351,108 @@ test("open-position market-value aliases feed holdings and Schedule FA", () => {
   );
 });
 
+test("Flex trades accept Stocks, preserve execution time, and match same-day FIFO chronologically", () => {
+  const csv = [
+    "Trades,Header,DataDiscriminator,Asset Class,Currency,Symbol,Trade Date,Trade Time,Quantity,Trade Price,Proceeds,IB Commission,Cost Basis,Realized PNL,Conid",
+    "Trades,Data,Order,Stocks,USD,ALFA.NEW,2025-06-01,15:00:00,-1,110,110,-1,-101,8,12345",
+    "Trades,Data,Order,Stocks,USD,ALFA,2025-06-01,09:30:00,1,100,-100,-1,101,0,12345",
+  ].join("\n");
+
+  const parsed = parseIbkrStatements(csv);
+  const review = buildReviewModel(parsed, { assessmentYear: "2026-27" });
+
+  assert.equal(parsed.normalized.trades[0].assetCategory, "STOCKS");
+  assert.equal(parsed.normalized.trades[0].timestamp, "2025-06-01T15:00:00");
+  assert.equal(parsed.normalized.trades[0].commission, -1);
+  assert.equal(parsed.normalized.trades[0].conid, "12345");
+  assert.equal(parsed.normalized.trades[0].unsupported, false);
+  assert.equal(review.schedules.capitalGains.length, 1);
+  assert.equal(review.schedules.capitalGains[0].gain, 8);
+  assert.equal(review.stats.fifo.unmatchedQuantity, 0);
+});
+
+test("Flex open-position fields retain report dates and group renamed symbols by Conid", () => {
+  const csv = [
+    "Open Positions,Header,DataDiscriminator,Asset Class,Currency,Symbol,Conid,Report Date,Quantity,Cost Basis Money,Mark Price,Position Value,FIFO Unrealized PNL",
+    "Open Positions,Data,Summary,Stocks,USD,ALFA,12345,2025-06-30,2,200,110,220,20",
+    "Open Positions,Data,Summary,Stocks,USD,ALFA.NEW,12345,2025-12-31,2,200,130,260,60",
+  ].join("\n");
+
+  const parsed = parseIbkrStatements(csv);
+  const review = buildReviewModel(parsed, { assessmentYear: "2026-27" });
+
+  assert.deepEqual(
+    parsed.normalized.openPositions.map((position) => ({
+      snapshotDate: position.snapshotDate,
+      costBasis: position.costBasis,
+      closePrice: position.closePrice,
+      unrealizedProfitLoss: position.unrealizedProfitLoss,
+      conid: position.conid,
+    })),
+    [
+      {
+        snapshotDate: "2025-06-30",
+        costBasis: 200,
+        closePrice: 110,
+        unrealizedProfitLoss: 20,
+        conid: "12345",
+      },
+      {
+        snapshotDate: "2025-12-31",
+        costBasis: 200,
+        closePrice: 130,
+        unrealizedProfitLoss: 60,
+        conid: "12345",
+      },
+    ],
+  );
+  assert.equal(review.summary.faEntities, 1);
+  assert.equal(review.summary.instruments, 1);
+  assert.equal(review.summary.positions, 1);
+  assert.equal(review.schedules.fa[0].symbol, "ALFA.NEW");
+  assert.equal(review.schedules.fa[0].peakValue, 260);
+  assert.equal(review.schedules.fa[0].closingValue, 260);
+  assert.equal(review.schedules.fa[0].closingStatus, "exact-period-end");
+  assert.doesNotMatch(JSON.stringify(review), /12345/);
+});
+
+test("human-readable statement periods supply Schedule FA snapshot dates", () => {
+  const csv = [
+    "Statement,Header,Field Name,Field Value",
+    "Statement,Data,Period,\"April 1, 2025 - December 31, 2025\"",
+    "Open Positions,Header,Asset Category,Currency,Symbol,Quantity,Cost Basis,Close Price,Value,Unrealized P/L",
+    "Open Positions,Data,STK,USD,ALFA,1,100,125,125,25",
+  ].join("\n");
+
+  const parsed = parseIbkrStatements(csv);
+  const review = buildReviewModel(parsed, { assessmentYear: "2026-27" });
+
+  assert.equal(parsed.normalized.statements[0].periodStart, "2025-04-01");
+  assert.equal(parsed.normalized.statements[0].periodEnd, "2025-12-31");
+  assert.equal(parsed.normalized.openPositions[0].snapshotDate, "2025-12-31");
+  assert.equal(review.schedules.fa[0].closingValue, 125);
+  assert.equal(review.schedules.fa[0].closingStatus, "exact-period-end");
+});
+
+test("description-guessed company names do not seed Schedule FA entities", () => {
+  const csv = [
+    "Dividends,Header,Currency,Date,Description,Amount",
+    "Dividends,Data,USD,2025-08-01,\"Apple Inc. (US0378331005) CASH DIVIDEND\",10",
+  ].join("\n");
+
+  const parsed = parseIbkrStatements(csv);
+  const review = buildReviewModel(parsed, { assessmentYear: "2026-27" });
+
+  assert.equal(parsed.normalized.dividends[0].symbol, "APPLE");
+  assert.equal(parsed.normalized.dividends[0].symbolEvidence, "description");
+  assert.equal(review.summary.faEntities, 0);
+  assert.ok(
+    review.validations.some(
+      (finding) => finding.code === "FA_DESCRIPTION_ONLY_DIVIDENDS",
+    ),
+  );
+});
+
 test("malformed numeric fields fail closed instead of becoming zero-valued tax rows", () => {
   const csv = [
     "Statement,Header,Field Name,Field Value",

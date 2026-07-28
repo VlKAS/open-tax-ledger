@@ -1869,7 +1869,9 @@ function ensureExportReady() {
 
 document.querySelectorAll("[data-step-target], [data-go-step]").forEach((button) => {
   button.addEventListener("click", () => {
-    selectStep(button.dataset.stepTarget ?? button.dataset.goStep);
+    const requestedStep = button.dataset.stepTarget ?? button.dataset.goStep;
+    selectStep(requestedStep);
+    focusWorkspaceStep(state.currentStep);
   });
 });
 
