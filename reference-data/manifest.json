@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
-  "generatedOn": "2026-07-27",
+  "generatedOn": "2026-08-23",
   "datasets": {
     "sbiUsdTtBuyCommunity": {
       "provider": "SBI FX RateKeeper community archive",
       "repository": "https://github.com/sahilgupta/sbi-fx-ratekeeper",
-      "sourceCommit": "4cea84491ec53b80a5171463e51e04f667bcb6e5",
+      "sourceCommit": "93be61ce8992086c67374459ca821909b0b1bfb8",
       "sourcePath": "csv_files/SBI_REFERENCE_RATES_USD.csv",
-      "upstreamSha256": "5e4633125e0cc91d05cac3823e7435081badd0cf36ec81d16e634e2fe9907049",
-      "normalizedSha256": "5a6e604c4f4366479515ea53fc18c47f29b970f6a94fbd9c38972fa58da12db2",
-      "records": 1551,
+      "upstreamSha256": "fac5397be8b5a928dc64bb231eb0aafc8f2bf72734c2f2cdca114737e9e5bed8",
+      "normalizedSha256": "d3799a4c3b7e5d5cd6039d9dd86e14a3020e7169861da13d3cf4fecf3f3b9731",
+      "records": 1571,
       "coverage": {
         "first": "2020-01-06",
-        "last": "2026-07-27"
+        "last": "2026-08-21"
       },
       "normalization": [
         "Keep DATE, TT BUY, and source URL only",
